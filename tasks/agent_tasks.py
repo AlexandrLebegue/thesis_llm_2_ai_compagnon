@@ -16,7 +16,8 @@ def run_agent_task_async(
     instruction: str,
     context: Dict[str, Any],
     session_id: str,
-    message_id: str
+    message_id: str,
+    conversation_id: str = None
 ):
     """
     Run SmolAgents orchestrator asynchronously
@@ -26,6 +27,7 @@ def run_agent_task_async(
         context: Document context data
         session_id: Session identifier
         message_id: Message ID to update with results
+        conversation_id: Conversation ID for chat history context
     
     Returns:
         dict: Agent execution result with artifacts
@@ -55,7 +57,8 @@ def run_agent_task_async(
                 instruction=instruction,
                 context=context,
                 session_id=session_id,
-                message=message
+                message=message,
+                conversation_id=conversation_id
             )
             
             if result['status'] == 'error':

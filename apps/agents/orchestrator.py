@@ -23,6 +23,7 @@ from apps.agents.tools.word_generator import SimpleWordGeneratorTool
 
 # Import Django models (lazy import to avoid circular imports)
 from django.utils import timezone
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +82,14 @@ class ChatbotOrchestrator:
         instruction: str,
         context: Dict[str, Any],
         session_id: str,
-        message=None
+        message=None,
+        conversation_id: str = None
     ) -> Dict[str, Any]:
-        """Process user request with context"""
+        """Process user request with context and conversation history"""
         
         try:
-            # Build prompt with context
-            prompt = self._build_prompt(instruction, context)
+            # Build prompt with context and conversation history
+            prompt = self._build_prompt(instruction, context, conversation_id)
             
             # Track temp directory state before agent execution
             temp_dir = os.path.join(os.getcwd(), 'temp')
@@ -166,20 +168,65 @@ class ChatbotOrchestrator:
                 'error': str(e)
             }
     
-    def _build_prompt(self, instruction: str, context: Dict[str, Any]) -> str:
-        """Build prompt with document context"""
+    def _build_prompt(self, instruction: str, context: Dict[str, Any], conversation_id: str = None) -> str:
+        """Build prompt with document context and conversation history"""
         prompt_parts = []
+        
+        # Add conversation history
+        conversation_history = self._get_conversation_history(conversation_id)
+        if conversation_history:
+            prompt_parts.append("=== Conversation History ===")
+            prompt_parts.extend(conversation_history)
+            prompt_parts.append("")  # Empty line separator
         
         # Add document context
         if context.get('documents'):
-            prompt_parts.append("Available documents:")
+            prompt_parts.append("=== Available Documents ===")
             for doc in context['documents']:
                 prompt_parts.append(f"- {doc['name']} ({doc['type']}): {doc['summary']}")
+            prompt_parts.append("")  # Empty line separator
         
-        # Add instruction
-        prompt_parts.append(f"\nUser request: {instruction}")
+        # Add current instruction
+        prompt_parts.append("=== Current Request ===")
+        prompt_parts.append(f"User request: {instruction}")
         
         return '\n'.join(prompt_parts)
+    
+    def _get_conversation_history(self, conversation_id: str = None) -> List[str]:
+        """Fetch recent conversation history for context"""
+        if not conversation_id:
+            return []
+        
+        try:
+            from apps.chat.models import Conversation, Message
+            
+            # Get conversation object
+            conversation = Conversation.objects.get(id=conversation_id)
+            
+            # Get last N messages (excluding the current message being processed)
+            max_history = getattr(settings, 'MAX_CONVERSATION_HISTORY', 10)
+            messages = Message.objects.filter(
+                conversation=conversation
+            ).exclude(
+                role='system'  # Exclude system messages
+            ).order_by('-created_at')[:max_history]
+            
+            # Format messages in chronological order (oldest first)
+            history_lines = []
+            for message in reversed(messages):
+                role_display = "User" if message.role == "user" else "Assistant"
+                # Truncate very long messages for context
+                content = message.content
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                
+                history_lines.append(f"{role_display}: {content}")
+            
+            return history_lines
+            
+        except Exception as e:
+            logger.warning(f"Error fetching conversation history: {str(e)}")
+            return []
     
     def _get_temp_files_snapshot(self, temp_dir: str) -> Dict[str, float]:
         """Get snapshot of temp directory files with modification times"""

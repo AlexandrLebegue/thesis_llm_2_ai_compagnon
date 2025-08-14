@@ -9,18 +9,42 @@
      @file-upload-complete.window="refreshDocumentList()"
      @message-sent.window="scrollToBottom()">
     
+    <!-- Mobile Sidebar Overlay -->
+    <div x-show="mobileMenuOpen"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click="closeMobileMenu()"
+         class="fixed inset-0 bg-gray-900 bg-opacity-50 z-40 lg:hidden"
+         style="display: none;"
+         aria-hidden="true"></div>
+
     <!-- Enhanced Sidebar -->
-    <aside class="w-80 bg-gradient-to-b from-white via-gray-50 to-blue-50/30 border-r border-gray-200/60 flex flex-col overflow-hidden shadow-lg backdrop-blur-sm"
+    <aside class="fixed inset-y-0 left-0 z-50 w-full bg-gradient-to-b from-white via-gray-50 to-blue-50/30 border-r border-gray-200/60 flex flex-col overflow-hidden shadow-lg backdrop-blur-sm transform transition-transform duration-300 ease-in-out lg:relative lg:inset-y-auto lg:translate-x-0 lg:w-80 lg:z-auto"
+           :class="mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
            role="complementary"
-           aria-label="Document management sidebar">
+           aria-label="Document management sidebar"
+           @keydown.escape="closeMobileMenu()">
         
         <!-- Enhanced Sidebar Header -->
-        <div class="p-6 border-b border-gray-200/60 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-            <h2 class="text-xl font-bold">Documents</h2>
+        <div class="p-6 border-b border-gray-200/60 bg-gradient-to-r from-blue-600 to-indigo-600 text-white relative">
+            <!-- Mobile close button -->
+            <button @click="closeMobileMenu()"
+                    class="absolute top-4 right-4 p-2 rounded-md text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 transition-colors duration-200 lg:hidden"
+                    aria-label="Close mobile menu">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+            
+            <h2 class="text-xl font-bold pr-12 lg:pr-0">Documents</h2>
             <p class="text-blue-100 text-sm mt-1">
                 <span x-text="documentCount"></span> of {{ max_documents }} documents
             </p>
-            <div class="absolute inset-0 bg-white/5 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:15px_15px]"></div>
+            <div class="absolute inset-0 bg-white/5 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:15px_15px] pointer-events-none"></div>
         </div>
         
         <!-- Enhanced File Upload Zone -->
@@ -160,20 +184,47 @@
     </aside>
     
     <!-- Enhanced Main Chat Area -->
-    <main class="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-white via-slate-50 to-blue-50/30" role="main">
+    <main class="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-white via-slate-50 to-blue-50/30 pb-16 lg:pb-0" role="main">
         
         <!-- Enhanced Chat Header -->
         <header class="bg-gradient-to-r from-white to-blue-50 border-b border-gray-200/60 px-6 py-6 shadow-sm backdrop-blur-sm">
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">AI Assistant</h1>
-                    <p class="text-gray-600 mt-1">
-                        Ask questions about your documents or request modifications
-                    </p>
+                <div class="flex items-center">
+                    <!-- Mobile hamburger button -->
+                    <button @click="toggleMobileMenu()"
+                            class="lg:hidden p-2 mr-3 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 transition-colors duration-200"
+                            aria-label="Open mobile menu"
+                            :aria-expanded="mobileMenuOpen">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                    
+                    <div>
+                        <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">AI Assistant</h1>
+                        <p class="text-gray-600 mt-1">
+                            Ask questions about your documents or request modifications
+                        </p>
+                    </div>
                 </div>
                 
-                <!-- Enhanced Chat actions -->
+                <!-- Enhanced Chat actions with status indicators -->
                 <div class="flex items-center space-x-3">
+                    <!-- Status indicators -->
+                    <div x-show="isUploading" class="flex items-center text-sm text-gray-600">
+                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="hidden sm:inline">Uploading...</span>
+                    </div>
+                    <div x-show="isProcessing" class="flex items-center text-sm text-gray-600">
+                        <svg class="animate-pulse -ml-1 mr-2 h-4 w-4 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <span class="hidden sm:inline">Processing...</span>
+                    </div>
+                    
                     <button @click="clearChat()"
                             class="inline-flex items-center px-4 py-2.5 border border-blue-200 shadow-lg text-sm font-semibold rounded-xl text-blue-700 bg-gradient-to-r from-white to-blue-50 hover:from-blue-50 hover:to-blue-100 hover:border-blue-300 focus-ring transform hover:scale-105 transition-all duration-200"
                             :disabled="messages.length === 0">
@@ -221,14 +272,14 @@
         </div>
         
         <!-- Enhanced Chat Input -->
-        <footer class="bg-gradient-to-r from-white to-blue-50 border-t border-gray-200/60 px-6 py-6 shadow-lg backdrop-blur-sm">
+        <footer class="bg-gradient-to-r from-white to-blue-50 border-t border-gray-200/60 px-6 py-6 shadow-lg backdrop-blur-sm mb-0 lg:mb-0">
             <form hx-post="{% url 'chat:send_message' %}"
                   hx-target="#messages-list"
-                  hx-swap="beforeend"
+                  hx-swap="none"
                   hx-on::after-request="this.reset()"
                   @submit="handleMessageSubmit($event)"
                   @htmx:before-request="handleImmediateMessageDisplay($event)"
-                  @htmx:after-request="resetSubmitState()"
+                  @htmx:after-request="handleHtmxResponse($event)"
                   @htmx:response-error="handleSubmissionError()"
                   @htmx:network-error="handleSubmissionError()"
                   class="flex items-end space-x-4">
@@ -307,6 +358,63 @@
             </div>
         </footer>
     </main>
+    
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 lg:hidden"
+         role="navigation"
+         aria-label="Mobile bottom navigation">
+        <div class="flex items-center justify-around py-2 px-4">
+            <!-- Documents button with badge -->
+            <button @click="toggleMobileMenu()"
+                    class="flex flex-col items-center p-2 text-gray-600 hover:text-blue-600 transition-colors duration-200"
+                    :class="mobileMenuOpen ? 'text-blue-600' : ''"
+                    aria-label="Open documents sidebar">
+                <div class="relative">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <!-- Document count badge -->
+                    <span x-show="documentCount > 0"
+                          x-text="documentCount"
+                          class="absolute -top-2 -right-2 h-5 w-5 text-xs font-bold text-white bg-blue-600 rounded-full flex items-center justify-center"
+                          :class="documentCount > 99 ? 'text-xs' : 'text-xs'"></span>
+                </div>
+                <span class="text-xs mt-1 font-medium">Docs</span>
+            </button>
+            
+            <!-- Chat/Clear button -->
+            <button @click="clearChat()"
+                    class="flex flex-col items-center p-2 text-gray-600 hover:text-red-600 transition-colors duration-200"
+                    :disabled="messages.length === 0"
+                    :class="messages.length === 0 ? 'opacity-50' : ''"
+                    aria-label="Clear chat">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                <span class="text-xs mt-1 font-medium">Clear</span>
+            </button>
+            
+            <!-- Quick action: Summary -->
+            <button @click="insertQuickMessage('Summarize all documents'); closeMobileMenu()"
+                    class="flex flex-col items-center p-2 text-gray-600 hover:text-orange-600 transition-colors duration-200"
+                    aria-label="Quick summary">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <span class="text-xs mt-1 font-medium">Summary</span>
+            </button>
+            
+            <!-- Quick action: Chart -->
+            <button @click="insertQuickMessage('Create a chart from the data'); closeMobileMenu()"
+                    class="flex flex-col items-center p-2 text-gray-600 hover:text-green-600 transition-colors duration-200"
+                    aria-label="Create chart">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                <span class="text-xs mt-1 font-medium">Chart</span>
+            </button>
+        </div>
+    </nav>
 </div>
 
 <script>
@@ -371,6 +479,9 @@ function chatInterface(initialDocCount, maxDocs) {
             // Create and display user message immediately
             this.displayUserMessage(message);
             
+            // Show typing indicator immediately after user message
+            this.showTypingIndicator();
+            
             // Set submitting state
             this.isSubmitting = true;
             this.messageLength = 0;
@@ -398,6 +509,141 @@ function chatInterface(initialDocCount, maxDocs) {
             
             // Update message count
             this.updateMessageCount();
+        },
+        
+        showTypingIndicator() {
+            const messagesList = document.getElementById('messages-list');
+            if (!messagesList) return;
+            
+            // Remove any existing typing indicator first
+            this.hideTypingIndicator();
+            
+            // Create typing indicator directly
+            this.createTypingIndicator();
+        },
+        
+        createTypingIndicator() {
+            const messagesList = document.getElementById('messages-list');
+            if (!messagesList) return;
+            
+            const typingHtml = `
+                <div class="message-enter flex justify-start animate-fade-in typing-indicator" id="typing-indicator" data-role="typing" aria-label="AI is typing" aria-live="polite">
+                    <div class="max-w-3xl flex flex-row items-start space-x-3">
+                        
+                        <!-- Enhanced Avatar with subtle animation -->
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 flex items-center justify-center shadow-lg ring-2 ring-white ring-opacity-60 transform hover:scale-105 transition-transform duration-200 animate-pulse">
+                                <svg class="h-5 w-5 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        
+                        <!-- Typing Message Bubble -->
+                        <div class="flex-1 min-w-0">
+                            <div class="relative group">
+                                <div class="px-5 py-4 rounded-2xl bg-gradient-to-br from-white via-gray-50 to-blue-50 border border-gray-200 text-gray-900 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden">
+                                    
+                                    <!-- Subtle background pattern -->
+                                    <div class="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-transparent to-indigo-50/30"></div>
+                                    
+                                    <!-- Animated shimmer effect -->
+                                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-shimmer"></div>
+                                    
+                                    <!-- Typing content -->
+                                    <div class="relative flex items-center space-x-2">
+                                        <svg class="h-4 w-4 text-teal-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                        </svg>
+                                        <span class="text-sm text-gray-600 font-medium">AI is thinking</span>
+                                        
+                                        <!-- Animated typing dots -->
+                                        <div class="flex space-x-1">
+                                            <div class="w-2 h-2 bg-teal-500 rounded-full animate-bounce typing-dot" style="animation-delay: 0ms"></div>
+                                            <div class="w-2 h-2 bg-teal-500 rounded-full animate-bounce typing-dot" style="animation-delay: 150ms"></div>
+                                            <div class="w-2 h-2 bg-teal-500 rounded-full animate-bounce typing-dot" style="animation-delay: 300ms"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Floating particles effect -->
+                                    <div class="absolute inset-0 pointer-events-none">
+                                        <div class="absolute top-2 left-4 w-1 h-1 bg-blue-300 rounded-full opacity-60 animate-float" style="animation-delay: 0s"></div>
+                                        <div class="absolute top-4 right-6 w-1 h-1 bg-teal-300 rounded-full opacity-40 animate-float" style="animation-delay: 1s"></div>
+                                        <div class="absolute bottom-3 left-8 w-1 h-1 bg-indigo-300 rounded-full opacity-50 animate-float" style="animation-delay: 2s"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Timestamp placeholder -->
+                                <div class="absolute left-0 mt-2 opacity-60">
+                                    <span class="text-xs text-gray-400 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md shadow-sm">
+                                        Typing...
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Screen reader announcement -->
+                    <div class="sr-only" aria-live="polite" aria-atomic="true">
+                        AI assistant is typing a response to your message.
+                    </div>
+                </div>
+            `;
+            
+            messagesList.insertAdjacentHTML('beforeend', typingHtml);
+            this.scrollToBottom();
+        },
+        
+        hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                // Add fade-out animation before removing
+                typingIndicator.classList.add('fade-out');
+                setTimeout(() => {
+                    if (typingIndicator.parentNode) {
+                        typingIndicator.remove();
+                    }
+                }, 300); // Match the fade-out animation duration
+            }
+        },
+        
+        replaceTypingIndicatorWithResponse(responseHtml) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                // Create a temporary container for the new response
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = responseHtml;
+                const newMessage = tempDiv.firstElementChild;
+                
+                if (newMessage) {
+                    // Add fade-in class to new message
+                    newMessage.style.opacity = '0';
+                    newMessage.style.transform = 'translateY(10px)';
+                    
+                    // Insert the new message after the typing indicator
+                    typingIndicator.parentNode.insertBefore(newMessage, typingIndicator.nextSibling);
+                    
+                    // Fade out typing indicator and fade in new message simultaneously
+                    typingIndicator.classList.add('fade-out');
+                    
+                    setTimeout(() => {
+                        // Remove typing indicator
+                        if (typingIndicator.parentNode) {
+                            typingIndicator.remove();
+                        }
+                        
+                        // Fade in the new message
+                        newMessage.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+                        newMessage.style.opacity = '1';
+                        newMessage.style.transform = 'translateY(0)';
+                        
+                        this.scrollToBottom();
+                    }, 150); // Start new message fade-in halfway through typing indicator fade-out
+                } else {
+                    // Fallback: just remove typing indicator
+                    this.hideTypingIndicator();
+                }
+            }
         },
         
         createUserMessageHtml(content, messageId) {
@@ -456,11 +702,17 @@ function chatInterface(initialDocCount, maxDocs) {
         handleMessageSubmit(event) {
             // Set submitting state
             this.isSubmitting = true;
+            // Close mobile menu when sending a message
+            if (window.appData && window.appData().mobileMenuOpen) {
+                window.appData().closeMobileMenu();
+            }
         },
         
         resetSubmitState() {
             this.isSubmitting = false;
             this.pendingMessageId = null;
+            // Hide typing indicator when request completes
+            this.hideTypingIndicator();
             this.$nextTick(() => {
                 this.scrollToBottom();
                 this.updateMessageCount();
@@ -485,6 +737,9 @@ function chatInterface(initialDocCount, maxDocs) {
                 }
                 this.pendingMessageId = null;
             }
+            
+            // Hide typing indicator on error
+            this.hideTypingIndicator();
             this.resetSubmitState();
             
             // Restore the message in the input for retry
@@ -499,6 +754,18 @@ function chatInterface(initialDocCount, maxDocs) {
                 input.focus();
                 this.autoResize({ target: input });
             }
+        },
+        
+        handleHtmxResponse(event) {
+            const response = event.detail.xhr.responseText;
+            if (response && response.trim()) {
+                // Use our custom transition logic instead of direct HTMX swap
+                this.replaceTypingIndicatorWithResponse(response);
+            } else {
+                // Fallback: just hide typing indicator
+                this.hideTypingIndicator();
+            }
+            this.resetSubmitState();
         },
         
         clearChat() {

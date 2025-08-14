@@ -122,6 +122,9 @@ ALLOWED_FILE_EXTENSIONS = ['.pdf', '.xlsx', '.docx']
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB per file
 MAX_DOCUMENTS_PER_SESSION = 20
 
+# Conversation History Settings
+MAX_CONVERSATION_HISTORY = 10  # Number of previous messages to include in LLM context
+
 # Session Configuration
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 7200  # 2 hours

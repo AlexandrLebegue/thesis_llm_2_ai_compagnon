@@ -1,0 +1,160 @@
+<div class="message-enter flex justify-start animate-fade-in typing-indicator"
+     role="listitem"
+     aria-label="AI is typing"
+     aria-live="polite"
+     data-role="typing"
+     id="typing-indicator">
+    
+    <div class="max-w-3xl flex flex-row items-start space-x-3">
+        
+        <!-- Enhanced Avatar with subtle animation -->
+        <div class="flex-shrink-0">
+            <div class="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 flex items-center justify-center shadow-lg ring-2 ring-white ring-opacity-60 transform hover:scale-105 transition-transform duration-200 animate-pulse">
+                <svg class="h-5 w-5 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+            </div>
+        </div>
+        
+        <!-- Typing Message Bubble -->
+        <div class="flex-1 min-w-0">
+            <div class="relative group">
+                <div class="px-5 py-4 rounded-2xl bg-gradient-to-br from-white via-gray-50 to-blue-50 border border-gray-200 text-gray-900 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden">
+                    
+                    <!-- Subtle background pattern -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-transparent to-indigo-50/30"></div>
+                    
+                    <!-- Animated shimmer effect -->
+                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-shimmer"></div>
+                    
+                    <!-- Typing content -->
+                    <div class="relative flex items-center space-x-2">
+                        <svg class="h-4 w-4 text-teal-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        <span class="text-sm text-gray-600 font-medium">AI is thinking</span>
+                        
+                        <!-- Animated typing dots -->
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-teal-500 rounded-full animate-bounce typing-dot" style="animation-delay: 0ms"></div>
+                            <div class="w-2 h-2 bg-teal-500 rounded-full animate-bounce typing-dot" style="animation-delay: 150ms"></div>
+                            <div class="w-2 h-2 bg-teal-500 rounded-full animate-bounce typing-dot" style="animation-delay: 300ms"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Floating particles effect -->
+                    <div class="absolute inset-0 pointer-events-none">
+                        <div class="absolute top-2 left-4 w-1 h-1 bg-blue-300 rounded-full opacity-60 animate-float" style="animation-delay: 0s"></div>
+                        <div class="absolute top-4 right-6 w-1 h-1 bg-teal-300 rounded-full opacity-40 animate-float" style="animation-delay: 1s"></div>
+                        <div class="absolute bottom-3 left-8 w-1 h-1 bg-indigo-300 rounded-full opacity-50 animate-float" style="animation-delay: 2s"></div>
+                    </div>
+                </div>
+                
+                <!-- Timestamp placeholder -->
+                <div class="absolute left-0 mt-2 opacity-60">
+                    <span class="text-xs text-gray-400 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md shadow-sm">
+                        Typing...
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Screen reader announcement -->
+<div class="sr-only" aria-live="polite" aria-atomic="true">
+    AI assistant is typing a response to your message.
+</div>
+
+<style>
+/* Shimmer animation for the typing bubble */
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.animate-shimmer {
+    animation: shimmer 2s infinite;
+}
+
+/* Enhanced bounce animation for typing dots */
+.typing-dot {
+    animation: typingBounce 1.4s infinite ease-in-out;
+}
+
+@keyframes typingBounce {
+    0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Floating animation for particles */
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0px) scale(1);
+        opacity: 0.6;
+    }
+    25% {
+        transform: translateY(-3px) scale(1.1);
+        opacity: 0.8;
+    }
+    50% {
+        transform: translateY(-1px) scale(0.9);
+        opacity: 0.4;
+    }
+    75% {
+        transform: translateY(-2px) scale(1.05);
+        opacity: 0.7;
+    }
+}
+
+.animate-float {
+    animation: float 3s infinite ease-in-out;
+}
+
+/* Breathing effect for the entire typing indicator */
+.typing-indicator {
+    animation: breathe 2s infinite ease-in-out;
+}
+
+@keyframes breathe {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.002);
+    }
+}
+
+/* Fade transition for smooth replacement */
+.typing-indicator.fade-out {
+    animation: fadeOut 0.3s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .typing-indicator .max-w-3xl {
+        max-width: 100%;
+    }
+}
+</style>

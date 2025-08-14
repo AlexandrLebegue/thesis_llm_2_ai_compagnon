@@ -136,7 +136,8 @@ class ChatView:
                     instruction=message_text,
                     context=context_obj.context_data,
                     session_id=request.session.session_key,
-                    message_id=str(user_message.id)
+                    message_id=str(user_message.id),
+                    conversation_id=str(conversation.id)
                 )
                 
                 # Create assistant message with task ID
@@ -168,7 +169,8 @@ class ChatView:
                     instruction=message_text,
                     context=context_obj.context_data,
                     session_id=request.session.session_key,
-                    message=assistant_message
+                    message=assistant_message,
+                    conversation_id=str(conversation.id)
                 )
                 
                 # Update assistant message with result

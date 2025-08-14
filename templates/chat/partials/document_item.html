@@ -205,6 +205,10 @@ function documentItem(initialStatus, documentId) {
         downloadOriginal() {
             // Download the original document
             window.location.href = `/documents/${this.documentId}/download/`;
+            // Close mobile menu if open
+            if (window.appData && window.appData().mobileMenuOpen) {
+                window.appData().closeMobileMenu();
+            }
         },
         
         retryProcessing() {
@@ -236,6 +240,10 @@ function documentItem(initialStatus, documentId) {
                         }
                         // Refresh the document list
                         htmx.trigger('#document-list', 'file-upload-complete');
+                        // Close mobile menu if open
+                        if (window.appData && window.appData().mobileMenuOpen) {
+                            window.appData().closeMobileMenu();
+                        }
                     }, 300);
                 }).catch((error) => {
                     console.error('Delete error:', error);
