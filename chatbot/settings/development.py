@@ -7,6 +7,9 @@ DEBUG = True
 import os
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1],0.0.0.0').split(',')
 
+# CSRF trusted origins for development (including Cloud Run URLs)
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if os.environ.get('CSRF_TRUSTED_ORIGINS') else ["https://thesis-llm-2-881860961470.europe-west1.run.app"]
+
 # Development database (SQLite)
 DATABASES = {
     'default': {

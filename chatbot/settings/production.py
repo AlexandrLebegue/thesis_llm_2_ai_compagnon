@@ -15,6 +15,9 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'
 
+# CSRF trusted origins for Google Cloud Run
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=lambda v: [s.strip() for s in v.split(',')])
+
 # Database configuration for production
 DATABASES = {
     'default': dj_database_url.config(
