@@ -1,0 +1,18 @@
+-r base.txt
+
+# Production Monitoring
+sentry-sdk[django]==1.39.1
+django-health-check==3.17.0
+
+# Performance
+django-cachalot==2.6.1
+redis-cache==3.0.0
+
+# Deployment
+dj-database-url==2.1.0
+django-storages==1.14.2
+boto3==1.34.0
+
+# Security
+django-csp==3.7
+django-permissions-policy==4.17.0

@@ -1,0 +1,730 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat - Ultra PDF Chatbot 3000{% endblock %}
+
+{% block content %}
+<div class="h-screen flex bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
+     x-data="chatInterface({{ current_document_count }}, {{ max_documents }})"
+     @file-upload-complete.window="refreshDocumentList()"
+     @message-sent.window="scrollToBottom()">
+    
+    <!-- Enhanced Sidebar -->
+    <aside class="w-80 bg-gradient-to-b from-white via-gray-50 to-blue-50/30 border-r border-gray-200/60 flex flex-col overflow-hidden shadow-lg backdrop-blur-sm"
+           role="complementary"
+           aria-label="Document management sidebar">
+        
+        <!-- Enhanced Sidebar Header -->
+        <div class="p-6 border-b border-gray-200/60 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+            <h2 class="text-xl font-bold">Documents</h2>
+            <p class="text-blue-100 text-sm mt-1">
+                <span x-text="documentCount"></span> of {{ max_documents }} documents
+            </p>
+            <div class="absolute inset-0 bg-white/5 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:15px_15px]"></div>
+        </div>
+        
+        <!-- Enhanced File Upload Zone -->
+        <div class="p-6 border-b border-gray-200/60">
+            <div class="file-upload-zone border-2 border-dashed border-blue-300/60 rounded-2xl p-8 text-center transition-all duration-500 bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-400 hover:shadow-lg hover:scale-[1.02] transform cursor-pointer"
+                 x-data="fileUpload(documentCount, maxDocuments)"
+                 @dragover.prevent="dragOver = true"
+                 @dragleave.prevent="dragOver = false"
+                 @drop.prevent="handleDrop($event)"
+                 @click="$refs.fileInput.click()"
+                 :class="{ 'drag-over border-blue-500 bg-gradient-to-br from-blue-100 to-indigo-100 shadow-xl scale-[1.02]': dragOver }"
+                 role="button"
+                 tabindex="0"
+                 aria-label="File upload area - Click to browse or drag and drop files"
+                 @keydown.enter="$refs.fileInput.click()"
+                 @keydown.space.prevent="$refs.fileInput.click()">
+                
+                <!-- Enhanced upload icon with multiple animation layers -->
+                <div class="relative">
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue-300 to-indigo-300 rounded-full opacity-30"></div>
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue-300 to-indigo-300 rounded-full opacity-20"></div>
+                    <div class="relative bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-full p-4 shadow-xl border border-white/60 backdrop-blur-sm">
+                        <svg class="h-8 w-8 text-transparent bg-gradient-to-br from-blue-600 to-indigo-600 bg-clip-text" fill="none" stroke="url(#upload-gradient)" viewBox="0 0 48 48" aria-hidden="true">
+                            <defs>
+                                <linearGradient id="upload-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#3b82f6"/>
+                                    <stop offset="50%" style="stop-color:#2563eb"/>
+                                    <stop offset="100%" style="stop-color:#6366f1"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <p class="text-base font-semibold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
+                        <span class="cursor-pointer hover:from-blue-800 hover:to-indigo-800 transition-all duration-300 bg-gradient-to-r bg-clip-text">
+                            Click to upload files
+                        </span>
+                        <span class="text-gray-600"> or drag and drop here</span>
+                    </p>
+                    <div class="mt-2 flex items-center justify-center space-x-4 text-xs text-gray-500">
+                        <div class="flex items-center">
+                            <svg class="h-4 w-4 text-red-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                            </svg>
+                            PDF
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="h-4 w-4 text-green-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Excel
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="h-4 w-4 text-blue-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Word
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1">
+                        Maximum file size: 50MB
+                    </p>
+                </div>
+                
+                <!-- Hidden file input -->
+                <input type="file"
+                       x-ref="fileInput"
+                       @change="handleFileSelect($event)"
+                       multiple
+                       accept=".pdf,.xlsx,.docx"
+                       class="hidden"
+                       aria-describedby="file-upload-description">
+                
+                <!-- Enhanced upload progress -->
+                <div x-show="isUploading" class="mt-4">
+                    <div class="bg-gray-200 rounded-full h-2.5 overflow-hidden shadow-inner">
+                        <div class="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-300 ease-out shadow-sm"
+                             :style="`width: ${uploadProgress}%`">
+                        </div>
+                    </div>
+                    <p class="text-sm text-blue-600 mt-2 font-medium">
+                        <svg class="animate-spin h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Uploading... <span x-text="uploadProgress"></span>%
+                    </p>
+                </div>
+                
+                <!-- Enhanced error display -->
+                <div x-show="uploadError" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div class="flex items-center">
+                        <svg class="h-4 w-4 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-sm text-red-600 font-medium" x-text="uploadError"></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="file-upload-description" class="sr-only">
+                Upload PDF, Excel, or Word documents. Maximum file size is 50MB.
+                You can upload up to {{ max_documents }} documents per session.
+            </div>
+        </div>
+        
+        <!-- Document List -->
+        <div class="flex-1 overflow-y-auto scrollbar-thin">
+            <div class="p-4">
+                <h3 class="text-sm font-medium text-gray-900 mb-3">Uploaded Documents</h3>
+                
+                <div id="document-list"
+                     hx-get="{% url 'documents:list_documents' %}"
+                     hx-trigger="load, file-upload-complete from:body"
+                     hx-swap="innerHTML"
+                     role="list"
+                     aria-label="List of uploaded documents">
+                    
+                    <!-- Documents will be loaded here -->
+                    {% for document in documents %}
+                        {% include 'chat/partials/document_item.html' with document=document %}
+                    {% empty %}
+                        <div class="text-center py-8">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            <p class="mt-2 text-sm text-gray-500">No documents uploaded yet</p>
+                            <p class="text-xs text-gray-400">Upload files to get started</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Enhanced Main Chat Area -->
+    <main class="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-white via-slate-50 to-blue-50/30" role="main">
+        
+        <!-- Enhanced Chat Header -->
+        <header class="bg-gradient-to-r from-white to-blue-50 border-b border-gray-200/60 px-6 py-6 shadow-sm backdrop-blur-sm">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">AI Assistant</h1>
+                    <p class="text-gray-600 mt-1">
+                        Ask questions about your documents or request modifications
+                    </p>
+                </div>
+                
+                <!-- Enhanced Chat actions -->
+                <div class="flex items-center space-x-3">
+                    <button @click="clearChat()"
+                            class="inline-flex items-center px-4 py-2.5 border border-blue-200 shadow-lg text-sm font-semibold rounded-xl text-blue-700 bg-gradient-to-r from-white to-blue-50 hover:from-blue-50 hover:to-blue-100 hover:border-blue-300 focus-ring transform hover:scale-105 transition-all duration-200"
+                            :disabled="messages.length === 0">
+                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        Clear Chat
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Enhanced Messages Area -->
+        <div class="flex-1 overflow-y-auto scrollbar-thin bg-gradient-to-b from-transparent via-blue-50/20 to-blue-50/30 px-6 py-6"
+             x-ref="messagesContainer"
+             role="log"
+             aria-label="Chat conversation"
+             aria-live="polite">
+            
+            <div id="messages-list" class="space-y-4">
+                {% for message in messages %}
+                    {% include 'chat/partials/message.html' with message=message %}
+                {% empty %}
+                    <!-- Welcome message -->
+                    <div class="flex justify-center">
+                        <div class="max-w-md text-center py-8">
+                            <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">Welcome to Ultra PDF Chatbot 3000!</h3>
+                            <p class="text-gray-600 text-sm leading-relaxed">
+                                Upload your PDF, Excel, or Word documents and start chatting with them. 
+                                I can help you analyze content, extract data, create summaries, generate charts, 
+                                and modify your documents.
+                            </p>
+                            <div class="mt-4 text-xs text-gray-500">
+                                <p>📄 Supported formats: PDF, XLSX, DOCX</p>
+                                <p>📊 I can create charts and modify files</p>
+                                <p>💬 Ask me anything about your documents</p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Enhanced Chat Input -->
+        <footer class="bg-gradient-to-r from-white to-blue-50 border-t border-gray-200/60 px-6 py-6 shadow-lg backdrop-blur-sm">
+            <form hx-post="{% url 'chat:send_message' %}"
+                  hx-target="#messages-list"
+                  hx-swap="beforeend"
+                  hx-on::after-request="this.reset()"
+                  @submit="handleMessageSubmit($event)"
+                  @htmx:before-request="handleImmediateMessageDisplay($event)"
+                  @htmx:after-request="resetSubmitState()"
+                  @htmx:response-error="handleSubmissionError()"
+                  @htmx:network-error="handleSubmissionError()"
+                  class="flex items-end space-x-4">
+                
+                <!-- Enhanced Message input -->
+                <div class="flex-1">
+                    <label for="message-input" class="sr-only">Type your message</label>
+                    <div class="relative">
+                        <textarea id="message-input"
+                                name="message"
+                                rows="1"
+                                placeholder="Ask a question about your documents..."
+                                class="block w-full rounded-2xl border-2 border-blue-200/60 shadow-lg bg-gradient-to-r from-white to-blue-50/30 focus:border-blue-400 focus:ring-4 focus:ring-blue-200/40 resize-none max-h-32 transition-all duration-300 placeholder-gray-500 backdrop-blur-sm py-4 px-5 text-gray-800 font-medium"
+                                x-ref="messageInput"
+                                @keydown.enter.prevent="if (!$event.shiftKey) { submitMessage($event) }"
+                                @input="autoResize($event)"
+                                :disabled="isSubmitting"
+                                required></textarea>
+                        
+                        <!-- Enhanced Character counter -->
+                        <div class="absolute bottom-3 right-4 text-xs font-medium bg-white/80 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm">
+                            <span x-text="messageLength" :class="messageLength > 900 ? 'text-red-500' : 'text-gray-500'"></span><span class="text-gray-400">/1000</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Enhanced Input hints -->
+                    <div class="mt-2 text-xs text-gray-600 bg-gradient-to-r from-transparent via-blue-50/50 to-transparent px-2 py-1 rounded-lg">
+                        Press <kbd class="px-1.5 py-0.5 bg-gray-200 text-gray-800 rounded font-mono text-xs">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 bg-gray-200 text-gray-800 rounded font-mono text-xs">Shift+Enter</kbd> for new line
+                    </div>
+                </div>
+                
+                <!-- Enhanced Send button -->
+                <button type="submit"
+                        class="inline-flex items-center px-6 py-4 border-2 border-transparent text-sm font-bold rounded-2xl shadow-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus-ring disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden"
+                        :disabled="isSubmitting || messageLength === 0 || messageLength > 1000"
+                        :class="{ 'opacity-75 scale-95': isSubmitting }">
+                    
+                    <!-- Button background pattern -->
+                    <div class="absolute inset-0 bg-white/10 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:20px_20px]"></div>
+                    
+                    <span x-show="!isSubmitting" class="relative flex items-center">
+                        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                        Send
+                    </span>
+                    
+                    <span x-show="isSubmitting" class="relative flex items-center">
+                        <svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Sending...
+                    </span>
+                </button>
+            </form>
+            
+            <!-- Enhanced Quick action buttons -->
+            <div class="mt-4 flex flex-wrap gap-3">
+                <button @click="insertQuickMessage('Summarize all documents')"
+                        class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 hover:from-orange-200 hover:to-red-200 hover:text-orange-800 border border-orange-200 hover:border-orange-300 focus-ring transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <span class="mr-2 text-base">📄</span> Summarize all
+                </button>
+                <button @click="insertQuickMessage('Create a chart from the data')"
+                        class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 hover:from-green-200 hover:to-emerald-200 hover:text-green-800 border border-green-200 hover:border-green-300 focus-ring transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <span class="mr-2 text-base">📊</span> Create chart
+                </button>
+                <button @click="insertQuickMessage('Extract key insights')"
+                        class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 hover:from-blue-200 hover:to-cyan-200 hover:text-blue-800 border border-blue-200 hover:border-blue-300 focus-ring transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <span class="mr-2 text-base">🔍</span> Extract insights
+                </button>
+                <button @click="insertQuickMessage('Compare the documents')"
+                        class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 hover:from-blue-200 hover:to-indigo-200 hover:text-blue-800 border border-blue-200 hover:border-blue-300 focus-ring transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <span class="mr-2 text-base">🔄</span> Compare docs
+                </button>
+            </div>
+        </footer>
+    </main>
+</div>
+
+<script>
+// Chat Interface Alpine.js Component
+function chatInterface(initialDocCount, maxDocs) {
+    return {
+        documentCount: initialDocCount,
+        maxDocuments: maxDocs,
+        isSubmitting: false,
+        messageLength: 0,
+        messages: [],
+        pendingMessageId: null,
+        
+        init() {
+            this.$nextTick(() => {
+                this.scrollToBottom();
+                this.setupMessageInput();
+                this.updateMessageCount();
+            });
+        },
+        
+        updateMessageCount() {
+            // Count existing messages on the page
+            const messageElements = document.querySelectorAll('#messages-list [data-role]');
+            this.messages = Array.from(messageElements);
+        },
+        
+        setupMessageInput() {
+            const input = this.$refs.messageInput;
+            if (input) {
+                input.addEventListener('input', () => {
+                    this.messageLength = input.value.length;
+                });
+            }
+        },
+        
+        
+        scrollToBottom() {
+            this.$nextTick(() => {
+                const container = this.$refs.messagesContainer;
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            });
+        },
+        
+        autoResize(event) {
+            const textarea = event.target;
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
+        },
+        
+        handleImmediateMessageDisplay(event) {
+            // Get the message from the input directly
+            const messageInput = this.$refs.messageInput;
+            const message = messageInput ? messageInput.value.trim() : '';
+            
+            if (!message) {
+                return;
+            }
+            
+            // Create and display user message immediately
+            this.displayUserMessage(message);
+            
+            // Set submitting state
+            this.isSubmitting = true;
+            this.messageLength = 0;
+            
+            // Clear the input
+            messageInput.value = '';
+            this.autoResize({ target: messageInput });
+        },
+        
+        displayUserMessage(content) {
+            const messagesList = document.getElementById('messages-list');
+            if (!messagesList) return;
+            
+            // Generate unique ID for this message
+            this.pendingMessageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            
+            // Create user message HTML
+            const userMessageHtml = this.createUserMessageHtml(content, this.pendingMessageId);
+            
+            // Insert the message
+            messagesList.insertAdjacentHTML('beforeend', userMessageHtml);
+            
+            // Scroll to bottom
+            this.scrollToBottom();
+            
+            // Update message count
+            this.updateMessageCount();
+        },
+        
+        createUserMessageHtml(content, messageId) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            return `
+                <div class="message-enter flex justify-end animate-fade-in"
+                     role="listitem"
+                     aria-label="User message"
+                     data-role="user"
+                     data-message-id="${messageId}">
+                    <div class="max-w-3xl flex flex-row-reverse items-start space-x-3 space-x-reverse">
+                        <!-- Enhanced Avatar -->
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white ring-opacity-60 transform hover:scale-105 transition-transform duration-200">
+                                <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <!-- Enhanced Message Content -->
+                        <div class="flex-1 min-w-0">
+                            <!-- Enhanced Message Bubble -->
+                            <div class="relative group">
+                                <div class="px-5 py-4 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden">
+                                    <!-- Subtle background pattern -->
+                                    <div class="absolute inset-0 bg-white bg-opacity-10 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:20px_20px]"></div>
+                                    <!-- Message Text -->
+                                    <div class="relative text-sm leading-relaxed break-words font-medium markdown-content">
+                                        ${content.replace(/\n/g, '<br>')}
+                                    </div>
+                                </div>
+                                <!-- Enhanced Message timestamp -->
+                                <div class="absolute right-0 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0">
+                                    <span class="text-xs text-gray-400 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md shadow-sm">
+                                        ${timeString}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Screen reader announcement for new messages -->
+                <div class="sr-only" aria-live="polite" aria-atomic="true">
+                    New user message: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}
+                </div>
+            `;
+        },
+        
+        handleMessageSubmit(event) {
+            // Set submitting state
+            this.isSubmitting = true;
+        },
+        
+        resetSubmitState() {
+            this.isSubmitting = false;
+            this.pendingMessageId = null;
+            this.$nextTick(() => {
+                this.scrollToBottom();
+                this.updateMessageCount();
+            });
+        },
+        
+        submitMessage(event) {
+            if (this.isSubmitting || this.messageLength === 0) return;
+            
+            const form = event.target.closest('form');
+            if (form) {
+                form.requestSubmit();
+            }
+        },
+        
+        handleSubmissionError() {
+            // Remove the pending user message if submission fails
+            if (this.pendingMessageId) {
+                const pendingMessage = document.querySelector(`[data-message-id="${this.pendingMessageId}"]`);
+                if (pendingMessage) {
+                    pendingMessage.remove();
+                }
+                this.pendingMessageId = null;
+            }
+            this.resetSubmitState();
+            
+            // Restore the message in the input for retry
+            showToast('Failed to send message. Please try again.', 'error');
+        },
+        
+        insertQuickMessage(text) {
+            const input = this.$refs.messageInput;
+            if (input) {
+                input.value = text;
+                this.messageLength = text.length;
+                input.focus();
+                this.autoResize({ target: input });
+            }
+        },
+        
+        clearChat() {
+            if (confirm('Are you sure you want to clear the chat history?')) {
+                // Make AJAX request to clear chat
+                fetch('{% url "chat:clear_chat" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Content-Type': 'application/json',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Clear the messages from the UI
+                        const messagesList = document.getElementById('messages-list');
+                        if (messagesList) {
+                            messagesList.innerHTML = `
+                                <!-- Welcome message -->
+                                <div class="flex justify-center">
+                                    <div class="max-w-md text-center py-8">
+                                        <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                        </svg>
+                                        <h3 class="text-lg font-medium text-gray-900 mb-2">Welcome to Ultra PDF Chatbot 3000!</h3>
+                                        <p class="text-gray-600 text-sm leading-relaxed">
+                                            Upload your PDF, Excel, or Word documents and start chatting with them.
+                                            I can help you analyze content, extract data, create summaries, generate charts,
+                                            and modify your documents.
+                                        </p>
+                                        <div class="mt-4 text-xs text-gray-500">
+                                            <p>📄 Supported formats: PDF, XLSX, DOCX</p>
+                                            <p>📊 I can create charts and modify files</p>
+                                            <p>💬 Ask me anything about your documents</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        // Reset the messages array
+                        this.messages = [];
+                        
+                        // Show success message
+                        showToast('Chat history cleared successfully!', 'success');
+                    } else {
+                        showToast('Failed to clear chat: ' + (data.error || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error clearing chat:', error);
+                    showToast('Failed to clear chat. Please try again.', 'error');
+                });
+            }
+        },
+        
+        refreshDocumentList() {
+            // This will be triggered by file upload completion
+            htmx.trigger('#document-list', 'file-upload-complete');
+        }
+    }
+}
+
+// File Upload Alpine.js Component
+function fileUpload(parentDocumentCount, parentMaxDocuments) {
+    return {
+        dragOver: false,
+        isUploading: false,
+        uploadProgress: 0,
+        uploadError: '',
+        parentDocumentCount: parentDocumentCount,
+        parentMaxDocuments: parentMaxDocuments,
+        
+        handleDrop(event) {
+            this.dragOver = false;
+            const files = Array.from(event.dataTransfer.files);
+            this.processFiles(files);
+        },
+        
+        handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            this.processFiles(files);
+        },
+        
+        processFiles(files) {
+            this.uploadError = '';
+            
+            // Validate files
+            const validFiles = [];
+            const allowedTypes = ['.pdf', '.xlsx', '.docx'];
+            const maxSize = 50 * 1024 * 1024; // 50MB
+            
+            for (const file of files) {
+                // Check file type
+                const extension = '.' + file.name.split('.').pop().toLowerCase();
+                if (!allowedTypes.includes(extension)) {
+                    this.uploadError = `File "${file.name}" has an unsupported format. Please upload PDF, Excel, or Word files.`;
+                    return;
+                }
+                
+                // Check file size
+                if (file.size > maxSize) {
+                    this.uploadError = `File "${file.name}" is too large. Maximum size is 50MB.`;
+                    return;
+                }
+                
+                validFiles.push(file);
+            }
+            
+            if (validFiles.length === 0) return;
+            
+            // Check document limit using the passed values
+            const currentCount = parseInt(this.parentDocumentCount);
+            if (currentCount + validFiles.length > this.parentMaxDocuments) {
+                this.uploadError = `Cannot upload ${validFiles.length} files. This would exceed the maximum of ${this.parentMaxDocuments} documents.`;
+                return;
+            }
+            
+            this.uploadFiles(validFiles);
+        },
+        
+        async uploadFiles(files) {
+            this.isUploading = true;
+            this.uploadProgress = 0;
+            
+            let successCount = 0;
+            let failedFiles = [];
+            
+            // Upload files one by one
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                try {
+                    const success = await this.uploadSingleFile(file);
+                    if (success) {
+                        successCount++;
+                    } else {
+                        failedFiles.push(file.name);
+                    }
+                } catch (error) {
+                    failedFiles.push(file.name);
+                }
+                
+                // Update progress
+                this.uploadProgress = Math.round(((i + 1) / files.length) * 100);
+            }
+            
+            this.isUploading = false;
+            
+            // Update parent document count
+            const parentComponent = this.$root;
+            if (parentComponent && parentComponent.documentCount !== undefined) {
+                parentComponent.documentCount += successCount;
+            }
+            
+            // Trigger document list refresh
+            this.$dispatch('file-upload-complete');
+            
+            // Show results
+            if (successCount > 0) {
+                showToast(`Successfully uploaded ${successCount} file(s)`, 'success');
+            }
+            
+            if (failedFiles.length > 0) {
+                this.uploadError = `Failed to upload: ${failedFiles.join(', ')}`;
+            }
+            
+            // Reset file input
+            this.$refs.fileInput.value = '';
+        },
+        
+        uploadSingleFile(file) {
+            return new Promise((resolve) => {
+                const formData = new FormData();
+                formData.append('document', file);  // Use 'document' field name as expected by backend
+                
+                // Add CSRF token
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                formData.append('csrfmiddlewaretoken', csrfToken);
+                
+                const xhr = new XMLHttpRequest();
+                
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            resolve(response.status === 'success');
+                        } catch (e) {
+                            console.error('Failed to parse upload response:', e);
+                            resolve(false);
+                        }
+                    } else {
+                        console.error('Upload failed with status:', xhr.status);
+                        resolve(false);
+                    }
+                });
+                
+                xhr.addEventListener('error', () => {
+                    console.error('Upload request failed');
+                    resolve(false);
+                });
+                
+                xhr.open('POST', '/documents/upload/');
+                xhr.send(formData);
+            });
+        }
+    }
+}
+</script>
+
+<!-- Initialize polling for pending messages -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    setInterval(() => {
+        const pendingMessages = document.querySelectorAll('[data-task-id]');
+        pendingMessages.forEach(element => {
+            const taskId = element.dataset.taskId;
+            if (taskId) {
+                htmx.ajax('GET', `/task/${taskId}/status/`, {
+                    target: element,
+                    swap: 'outerHTML'
+                });
+            }
+        });
+    }, 2000); // Poll every 2 seconds
+});
+</script>
+{% endblock %}

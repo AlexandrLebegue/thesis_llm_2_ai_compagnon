@@ -1,0 +1,2 @@
+# This file ensures the media directory is tracked by git
+# User uploads will be stored here during development
