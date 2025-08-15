@@ -291,7 +291,7 @@
                         <textarea id="message-input"
                                 name="message"
                                 rows="1"
-                                placeholder="Ask a question about your documents..."
+                                placeholder="Ask a question about your documents... (Press Enter to send, Shift+Enter for new line)"
                                 class="block w-full rounded-2xl border-2 border-blue-200/60 shadow-lg bg-gradient-to-r from-white to-blue-50/30 focus:border-blue-400 focus:ring-4 focus:ring-blue-200/40 resize-none max-h-32 transition-all duration-300 placeholder-gray-500 backdrop-blur-sm py-4 px-5 text-gray-800 font-medium"
                                 x-ref="messageInput"
                                 @keydown.enter.prevent="if (!$event.shiftKey) { submitMessage($event) }"
@@ -305,10 +305,6 @@
                         </div>
                     </div>
                     
-                    <!-- Enhanced Input hints -->
-                    <div class="mt-2 text-xs text-gray-600 bg-gradient-to-r from-transparent via-blue-50/50 to-transparent px-2 py-1 rounded-lg">
-                        Press <kbd class="px-1.5 py-0.5 bg-gray-200 text-gray-800 rounded font-mono text-xs">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 bg-gray-200 text-gray-800 rounded font-mono text-xs">Shift+Enter</kbd> for new line
-                    </div>
                 </div>
                 
                 <!-- Enhanced Send button -->
@@ -337,8 +333,8 @@
                 </button>
             </form>
             
-            <!-- Enhanced Quick action buttons -->
-            <div class="mt-4 flex flex-wrap gap-3">
+            <!-- Enhanced Quick action buttons - Hidden on mobile -->
+            <div class="mt-4 flex flex-wrap gap-3 hidden lg:flex">
                 <button @click="insertQuickMessage('Summarize all documents')"
                         class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 hover:from-orange-200 hover:to-red-200 hover:text-orange-800 border border-orange-200 hover:border-orange-300 focus-ring transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg">
                     <span class="mr-2 text-base">📄</span> Summarize all
