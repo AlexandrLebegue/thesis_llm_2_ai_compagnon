@@ -15,6 +15,7 @@ from .tool_utils import (
     ToolInputSanitizer, ToolValidator, FileVerifier,
     DebugLogger, ErrorFormatter, ToolOutputSanitizer
 )
+from .excel_preview import ExcelPreviewGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -159,9 +160,19 @@ class ModifyExcelTool(Tool):
                 }
                 return ToolOutputSanitizer.sanitize_tool_output(result, 'modify_excel')
             
+            # Generate HTML preview
+            preview_result = ExcelPreviewGenerator.generate_preview(output_path)
+            preview_html = None
+            if preview_result['success']:
+                preview_html = preview_result['preview_html']
+                logger.info(f"Generated HTML preview for modified Excel file")
+            else:
+                logger.warning(f"Failed to generate preview: {preview_result.get('error', 'Unknown error')}")
+            
             result = {
                 'status': 'success',
                 'output_path': output_path,
+                'preview_html': preview_html,
                 'message': f'Excel file modified successfully: {Path(output_path).name}'
             }
             

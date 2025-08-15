@@ -14,6 +14,7 @@ import logging
 import pandas as pd
 from pathlib import Path
 import uuid
+from .excel_preview import ExcelPreviewGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -195,12 +196,22 @@ class ParseExcelTool(Tool):
             # Generate preview files
             artifacts = self._generate_preview_files(content, file_path)
             
+            # Generate HTML preview
+            preview_result = ExcelPreviewGenerator.generate_preview(resolved_path)
+            preview_html = None
+            if preview_result['success']:
+                preview_html = preview_result['preview_html']
+                logger.info(f"Generated HTML preview for {file_path}")
+            else:
+                logger.warning(f"Failed to generate preview for {file_path}: {preview_result.get('error', 'Unknown error')}")
+            
             result = {
                 'status': 'success',
                 'sheets': {name: df.to_dict('records') for name, df in content.sheets.items()},
                 'metadata': content.metadata,
                 'summary': ExcelParser.generate_summary(content),
-                'artifacts': artifacts
+                'artifacts': artifacts,
+                'preview_html': preview_html
             }
             
             # Add artifact paths to result for orchestrator extraction

@@ -21,6 +21,7 @@ from .tool_utils import (
     ToolInputSanitizer, ToolValidator, FileVerifier,
     DebugLogger, ErrorFormatter
 )
+from .excel_preview import ExcelPreviewGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,23 @@ class ExcelGeneratorTool(Tool):
                 logger.warning("Excel file created but appears to have no data")
                 return f"Excel file created but may be empty: {output_path}"
             
-            return f"Excel file created successfully: {output_path}"
+            # Generate HTML preview
+            preview_result = ExcelPreviewGenerator.generate_preview(output_path)
+            preview_html = None
+            if preview_result['success']:
+                preview_html = preview_result['preview_html']
+                logger.info(f"Generated HTML preview for {filename}")
+            else:
+                logger.warning(f"Failed to generate preview for {filename}: {preview_result.get('error', 'Unknown error')}")
+            
+            # Return structured result including preview
+            result = {
+                'file_path': output_path,
+                'preview_html': preview_html,
+                'message': f"Excel file created successfully: {output_path}"
+            }
+            
+            return str(result)  # Convert to string for tool compatibility
             
         except Exception as e:
             logger.error(f"Error in excel_generator: {str(e)}", exc_info=True)

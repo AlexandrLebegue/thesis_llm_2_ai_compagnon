@@ -442,6 +442,207 @@ class ChatView:
             return HttpResponse('Preview failed', status=500)
     
     @staticmethod
+    @require_http_methods(["GET"])
+    def view_excel_preview(request, artifact_id):
+        """View Excel document preview as HTML"""
+        try:
+            # Get artifact
+            artifact = Artifact.objects.get(id=artifact_id)
+            
+            # Check if artifact belongs to current session
+            session_key = request.session.session_key
+            if not session_key:
+                return HttpResponse('Session not found', status=404)
+            
+            # Verify artifact belongs to user's session
+            message_session = artifact.message.conversation.session.session.session_key
+            if message_session != session_key:
+                return HttpResponse('Artifact not found', status=404)
+            
+            # Check if this is an Excel document
+            if not (artifact.file_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel']
+                    or 'excel' in artifact.file_type.lower()
+                    or 'spreadsheet' in artifact.file_type.lower()
+                    or artifact.file_name.lower().endswith(('.xlsx', '.xls'))):
+                return HttpResponse('Not an Excel document', status=400)
+            
+            # Get preview HTML
+            if artifact.preview_html:
+                # Serve the stored preview HTML
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <title>Excel Preview - {artifact.file_name}</title>
+                    <style>
+                        body {{
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            max-width: 1200px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            background-color: #f9f9f9;
+                        }}
+                        .preview-container {{
+                            background: white;
+                            padding: 30px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }}
+                        .excel-sheet-container {{
+                            margin-bottom: 2em;
+                        }}
+                        .preview-sheet-title {{
+                            font-size: 1.5em;
+                            margin-bottom: 0.5em;
+                            color: #2c3e50;
+                            border-bottom: 2px solid #27ae60;
+                            padding-bottom: 5px;
+                        }}
+                        .excel-sheet-stats {{
+                            background-color: #f8f9fa;
+                            padding: 0.5em 1em;
+                            margin-bottom: 1em;
+                            border-radius: 4px;
+                            color: #6c757d;
+                            font-size: 0.9em;
+                        }}
+                        .excel-table-wrapper {{
+                            overflow-x: auto;
+                            margin: 1em 0;
+                        }}
+                        .preview-excel-table {{
+                            border-collapse: collapse;
+                            width: 100%;
+                            font-size: 0.9em;
+                        }}
+                        .preview-excel-header {{
+                            background-color: #27ae60;
+                            color: white;
+                            padding: 12px 8px;
+                            text-align: left;
+                            font-weight: bold;
+                            border: 1px solid #219a52;
+                        }}
+                        .preview-excel-cell {{
+                            padding: 8px;
+                            border: 1px solid #ddd;
+                            vertical-align: top;
+                        }}
+                        .preview-excel-cell:nth-child(even) {{
+                            background-color: #f8f9fa;
+                        }}
+                        .excel-tabs-container {{
+                            margin-bottom: 2em;
+                        }}
+                        .excel-tabs-header {{
+                            display: flex;
+                            border-bottom: 2px solid #ddd;
+                            margin-bottom: 1em;
+                        }}
+                        .excel-tab-button {{
+                            background: #f8f9fa;
+                            border: none;
+                            padding: 10px 20px;
+                            cursor: pointer;
+                            border-top: 3px solid transparent;
+                            transition: all 0.3s ease;
+                        }}
+                        .excel-tab-button.active {{
+                            background: white;
+                            border-top-color: #27ae60;
+                            color: #27ae60;
+                            font-weight: bold;
+                        }}
+                        .excel-tab-button:hover {{
+                            background: #e9ecef;
+                        }}
+                        .excel-tab-content {{
+                            display: none;
+                        }}
+                        .excel-tab-content.active {{
+                            display: block;
+                        }}
+                        .preview-truncated {{
+                            margin-top: 2em;
+                            padding: 1em;
+                            background-color: #fff3cd;
+                            border-left: 4px solid #ffc107;
+                            color: #856404;
+                        }}
+                    </style>
+                    <script>
+                        function switchExcelTab(tabId) {{
+                            // Hide all tabs
+                            const contents = document.querySelectorAll('.excel-tab-content');
+                            contents.forEach(content => content.classList.remove('active'));
+                            
+                            // Remove active class from all buttons
+                            const buttons = document.querySelectorAll('.excel-tab-button');
+                            buttons.forEach(button => button.classList.remove('active'));
+                            
+                            // Show selected tab
+                            const targetContent = document.getElementById('tab-' + tabId);
+                            if (targetContent) {{
+                                targetContent.classList.add('active');
+                            }}
+                            
+                            // Activate button
+                            const targetButton = document.querySelector('[data-tab="' + tabId + '"]');
+                            if (targetButton) {{
+                                targetButton.classList.add('active');
+                            }}
+                        }}
+                    </script>
+                </head>
+                <body>
+                    <div class="preview-container">
+                        <h1 style="border-bottom: 2px solid #27ae60; padding-bottom: 10px;">
+                            📊 {artifact.file_name}
+                        </h1>
+                        {artifact.preview_html}
+                    </div>
+                </body>
+                </html>
+                """
+                
+                response = HttpResponse(html_content, content_type='text/html')
+                # Allow iframe embedding from same origin to fix Firefox security issue
+                response['X-Frame-Options'] = 'SAMEORIGIN'
+                return response
+            else:
+                # No preview available
+                return HttpResponse('''
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <title>Preview Not Available</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                            .message { background: #f8f9fa; padding: 20px; border-radius: 8px; display: inline-block; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="message">
+                            <h2>Preview Not Available</h2>
+                            <p>This Excel document doesn't have a preview available.</p>
+                            <p>Please download the document to view its contents.</p>
+                        </div>
+                    </body>
+                    </html>
+                ''', content_type='text/html')
+                
+        except Artifact.DoesNotExist:
+            return HttpResponse('Artifact not found', status=404)
+        except Exception as e:
+            logger.error(f"Error viewing Excel preview {artifact_id}: {str(e)}")
+            return HttpResponse('Preview failed', status=500)
+    
+    @staticmethod
     @require_http_methods(["POST"])
     def clear_chat(request):
         """Clear chat history for current session"""

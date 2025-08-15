@@ -58,7 +58,7 @@ class ChatbotOrchestrator:
             verbosity_level=1,
             additional_authorized_imports=[
                 "pandas", "numpy", "json", "os", "tempfile", "random", "re",
-                "datetime", "pathlib", "io", "base64", "requests"
+                "datetime", "pathlib", "io", "base64", "requests", "string"
             ]
         )
     
@@ -497,10 +497,13 @@ class ChatbotOrchestrator:
                 
                 mime_type = self._get_mime_type(file_path)
                 
-                # Extract preview HTML for Word documents
+                # Extract preview HTML for Word and Excel documents
                 preview_html = None
                 if (mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or
-                    file_path.suffix.lower() == '.docx'):
+                    file_path.suffix.lower() == '.docx' or
+                    mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or
+                    mime_type == 'application/vnd.ms-excel' or
+                    file_path.suffix.lower() in ['.xlsx', '.xls']):
                     preview_html = self._extract_preview_html(file_path, agent_result)
                 
                 # Create Artifact record with enhanced error handling
@@ -570,7 +573,7 @@ class ChatbotOrchestrator:
         return type_mapping.get(ext, 'application/octet-stream')
     
     def _extract_preview_html(self, file_path: Path, agent_result=None) -> str:
-        """Extract preview HTML for Word documents from tool results or generate it"""
+        """Extract preview HTML for Word and Excel documents from tool results or generate it"""
         try:
             # First, try to extract from agent result if it contains preview_html
             if agent_result and isinstance(agent_result, str):
@@ -590,19 +593,38 @@ class ChatbotOrchestrator:
                     except (ValueError, SyntaxError):
                         continue
             
-            # Fallback: Generate preview using WordPreviewGenerator
-            try:
-                from apps.agents.tools.word_preview import WordPreviewGenerator
-                preview_result = WordPreviewGenerator.generate_preview(str(file_path))
-                if preview_result['success']:
-                    logger.info(f"Generated preview HTML for {file_path.name}")
-                    return preview_result['preview_html']
-                else:
-                    logger.warning(f"Failed to generate preview for {file_path.name}: {preview_result.get('error', 'Unknown error')}")
-            except ImportError:
-                logger.warning("WordPreviewGenerator not available")
-            except Exception as e:
-                logger.error(f"Error generating preview for {file_path.name}: {str(e)}")
+            # Determine file type and generate preview accordingly
+            file_ext = file_path.suffix.lower()
+            
+            if file_ext == '.docx':
+                # Generate Word preview
+                try:
+                    from apps.agents.tools.word_preview import WordPreviewGenerator
+                    preview_result = WordPreviewGenerator.generate_preview(str(file_path))
+                    if preview_result['success']:
+                        logger.info(f"Generated Word preview HTML for {file_path.name}")
+                        return preview_result['preview_html']
+                    else:
+                        logger.warning(f"Failed to generate Word preview for {file_path.name}: {preview_result.get('error', 'Unknown error')}")
+                except ImportError:
+                    logger.warning("WordPreviewGenerator not available")
+                except Exception as e:
+                    logger.error(f"Error generating Word preview for {file_path.name}: {str(e)}")
+            
+            elif file_ext in ['.xlsx', '.xls']:
+                # Generate Excel preview
+                try:
+                    from apps.agents.tools.excel_preview import ExcelPreviewGenerator
+                    preview_result = ExcelPreviewGenerator.generate_preview(str(file_path))
+                    if preview_result['success']:
+                        logger.info(f"Generated Excel preview HTML for {file_path.name}")
+                        return preview_result['preview_html']
+                    else:
+                        logger.warning(f"Failed to generate Excel preview for {file_path.name}: {preview_result.get('error', 'Unknown error')}")
+                except ImportError:
+                    logger.warning("ExcelPreviewGenerator not available")
+                except Exception as e:
+                    logger.error(f"Error generating Excel preview for {file_path.name}: {str(e)}")
                 
         except Exception as e:
             logger.error(f"Error extracting preview HTML for {file_path.name}: {str(e)}")
