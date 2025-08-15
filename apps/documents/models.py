@@ -19,6 +19,12 @@ class DocumentSession(models.Model):
     
     def __str__(self):
         return f"DocumentSession {self.session.session_key} ({self.document_count} docs)"
+    
+    @property
+    def documents(self):
+        """Get all documents across all conversations in this session"""
+        from apps.documents.models import Document
+        return Document.objects.filter(conversation__session=self)
 
 
 class Document(models.Model):
@@ -37,7 +43,7 @@ class Document(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    session = models.ForeignKey(DocumentSession, on_delete=models.CASCADE, related_name='documents')
+    conversation = models.ForeignKey('chat.Conversation', on_delete=models.CASCADE, related_name='documents', null=True, blank=True)
     original_name = models.CharField(max_length=255)
     file_path = models.CharField(max_length=500)  # Stored in temp directory
     document_type = models.CharField(max_length=10, choices=DOCUMENT_TYPES)
@@ -54,7 +60,7 @@ class Document(models.Model):
     class Meta:
         ordering = ['-uploaded_at']
         indexes = [
-            models.Index(fields=['session', 'status']),
+            models.Index(fields=['conversation', 'status']),
             models.Index(fields=['uploaded_at']),
         ]
     
@@ -63,14 +69,14 @@ class Document(models.Model):
 
 
 class DocumentContext(models.Model):
-    """Aggregated context from all documents in a session"""
-    session = models.OneToOneField(DocumentSession, on_delete=models.CASCADE)
+    """Aggregated context from all documents in a conversation"""
+    conversation = models.OneToOneField('chat.Conversation', on_delete=models.CASCADE, null=True, blank=True)
     context_data = models.JSONField(default=dict)
     last_updated = models.DateTimeField(auto_now=True)
     
     def update_context(self):
-        """Rebuild context from all ready documents"""
-        documents = self.session.documents.filter(status='ready')
+        """Rebuild context from all ready documents in this conversation"""
+        documents = self.conversation.documents.filter(status='ready')
         context = {
             'document_count': documents.count(),
             'documents': []
@@ -89,4 +95,4 @@ class DocumentContext(models.Model):
         self.save()
     
     def __str__(self):
-        return f"Context for {self.session}"
+        return f"Context for {self.conversation}"

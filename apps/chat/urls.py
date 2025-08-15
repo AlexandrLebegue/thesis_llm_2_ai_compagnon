@@ -20,6 +20,14 @@ urlpatterns = [
     path('send/', ChatView.send_message, name='send_message'),
     path('clear/', ChatView.clear_chat, name='clear_chat'),
     
+    # Conversation management
+    path('conversations/', ChatView.list_conversations, name='list_conversations'),
+    path('conversations/json/', ChatView.list_conversations_json, name='list_conversations_json'),
+    path('conversations/create/', ChatView.create_conversation, name='create_conversation'),
+    path('conversations/<uuid:conversation_id>/delete/', ChatView.delete_conversation, name='delete_conversation'),
+    path('conversations/<uuid:conversation_id>/rename/', ChatView.rename_conversation, name='rename_conversation'),
+    path('conversations/<uuid:conversation_id>/switch/', ChatView.switch_conversation, name='switch_conversation'),
+    
     # Task status checking for async operations
     path('task/<str:task_id>/status/', ChatView.check_task_status, name='check_task_status'),
     

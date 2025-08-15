@@ -44,21 +44,29 @@ class ChatView:
             session=session_obj
         )
         
-        # Get conversation
+        # Get active conversation or create one
         conversation = Conversation.objects.filter(
-            session=doc_session
+            session=doc_session,
+            is_active=True
         ).first()
         
         if not conversation:
-            conversation = Conversation.objects.create(session=doc_session)
+            conversation = Conversation.objects.create(
+                session=doc_session,
+                title='Main Conversation',
+                is_active=True
+            )
         
-        # Get documents and messages
-        documents = doc_session.documents.all()
+        # Get documents and messages for this conversation
+        documents = conversation.documents.all()
         messages = conversation.messages.all()
+        conversations = doc_session.conversations.all().order_by('-last_activity')
         
         context = {
             'documents': documents,
             'messages': messages,
+            'conversations': conversations,
+            'active_conversation': conversation,
             'max_documents': settings.MAX_DOCUMENTS_PER_SESSION,
             'current_document_count': documents.count(),
         }
@@ -70,12 +78,30 @@ class ChatView:
     def send_message(request):
         """Handle chat message submission"""
         try:
-            # Get session and conversation
+            # Get session and active conversation
             session_obj = Session.objects.get(session_key=request.session.session_key)
             doc_session = DocumentSession.objects.get(
                 session=session_obj
             )
-            conversation = Conversation.objects.get(session=doc_session)
+            
+            # Get conversation ID from request or use active one
+            conversation_id = request.POST.get('conversation_id')
+            if conversation_id:
+                conversation = Conversation.objects.get(id=conversation_id, session=doc_session)
+            else:
+                conversation = Conversation.objects.filter(
+                    session=doc_session,
+                    is_active=True
+                ).first()
+                if not conversation:
+                    conversation = Conversation.objects.create(
+                        session=doc_session,
+                        title='Main Conversation',
+                        is_active=True
+                    )
+            
+            # Update conversation activity
+            conversation.update_activity()
             
             # Get message and files
             message_text = request.POST.get('message', '')
@@ -84,15 +110,15 @@ class ChatView:
             # Process uploaded files
             if files:
                 for file in files:
-                    # Check document limit
-                    if doc_session.documents.count() >= settings.MAX_DOCUMENTS_PER_SESSION:
+                    # Check document limit per conversation
+                    if conversation.documents.count() >= settings.MAX_DOCUMENTS_PER_SESSION:
                         return JsonResponse({
-                            'error': f'Maximum {settings.MAX_DOCUMENTS_PER_SESSION} documents allowed'
+                            'error': f'Maximum {settings.MAX_DOCUMENTS_PER_SESSION} documents allowed per conversation'
                         }, status=400)
                     
-                    # Save document
+                    # Save document to conversation
                     document = Document.objects.create(
-                        session=doc_session,
+                        conversation=conversation,
                         original_name=file.name,
                         file_size=file.size,
                         document_type=file.name.split('.')[-1].lower()
@@ -121,14 +147,14 @@ class ChatView:
                 content=message_text
             )
             
-            # Get context
+            # Get context for this conversation
             context_obj, created = DocumentContext.objects.get_or_create(
-                session=doc_session
+                conversation=conversation
             )
             context_obj.update_context()
             
             # Determine if async processing is needed
-            use_async = ChatView._should_use_async(message_text, doc_session)
+            use_async = ChatView._should_use_async(message_text, conversation)
             
             if use_async and CELERY_AVAILABLE and run_agent_task_async:
                 # Queue agent task
@@ -188,15 +214,15 @@ class ChatView:
             return JsonResponse({'error': str(e)}, status=500)
     
     @staticmethod
-    def _should_use_async(message: str, session: DocumentSession) -> bool:
+    def _should_use_async(message: str, conversation: Conversation) -> bool:
         """Determine if request should be processed asynchronously"""
         # Use async for:
         # - Multiple documents (>3)
         # - Large documents (total > 10MB)
         # - Complex operations (modify, generate charts)
         
-        doc_count = session.documents.count()
-        total_size = session.documents.aggregate(
+        doc_count = conversation.documents.count()
+        total_size = conversation.documents.aggregate(
             total=models.Sum('file_size')
         )['total'] or 0
         
@@ -645,7 +671,7 @@ class ChatView:
     @staticmethod
     @require_http_methods(["POST"])
     def clear_chat(request):
-        """Clear chat history for current session"""
+        """Clear chat history for current conversation only"""
         try:
             # Get session and conversation
             session_key = request.session.session_key
@@ -655,27 +681,293 @@ class ChatView:
             session_obj = Session.objects.get(session_key=session_key)
             doc_session = DocumentSession.objects.get(session=session_obj)
             
-            # Delete all conversations and their messages for this session
-            conversations = Conversation.objects.filter(session=doc_session)
-            for conversation in conversations:
-                # Delete associated artifacts first
-                for message in conversation.messages.all():
-                    message.generated_artifacts.all().delete()
-                # Delete messages
-                conversation.messages.all().delete()
-            # Delete conversations
-            conversations.delete()
+            # Get the active conversation
+            conversation_id = request.POST.get('conversation_id')
+            if conversation_id:
+                conversation = Conversation.objects.get(id=conversation_id, session=doc_session)
+            else:
+                conversation = Conversation.objects.filter(
+                    session=doc_session,
+                    is_active=True
+                ).first()
+                
+            if not conversation:
+                return JsonResponse({'error': 'No active conversation found'}, status=404)
             
-            # Create a new conversation
-            new_conversation = Conversation.objects.create(session=doc_session)
+            # Delete associated artifacts first
+            for message in conversation.messages.all():
+                message.generated_artifacts.all().delete()
+            
+            # Delete messages for this conversation only
+            conversation.messages.all().delete()
             
             return JsonResponse({
                 'success': True,
-                'message': 'Chat history cleared successfully'
+                'message': 'Conversation cleared successfully'
+            })
+            
+        except (Session.DoesNotExist, DocumentSession.DoesNotExist):
+            return JsonResponse({'error': 'Session not found'}, status=404)
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Error clearing chat: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    @staticmethod
+    @require_http_methods(["POST"])
+    def create_conversation(request):
+        """Create a new conversation"""
+        try:
+            session_key = request.session.session_key
+            if not session_key:
+                return JsonResponse({'error': 'No active session'}, status=400)
+            
+            session_obj = Session.objects.get(session_key=session_key)
+            doc_session = DocumentSession.objects.get(session=session_obj)
+            
+            # Get title from request or generate one
+            title = request.POST.get('title', '').strip()
+            if not title:
+                # Generate title based on conversation count
+                count = doc_session.conversations.count() + 1
+                title = f'Conversation {count}'
+            
+            # Deactivate current active conversation
+            Conversation.objects.filter(
+                session=doc_session,
+                is_active=True
+            ).update(is_active=False)
+            
+            # Create new conversation
+            conversation = Conversation.objects.create(
+                session=doc_session,
+                title=title,
+                is_active=True
+            )
+            
+            # Create context for this conversation
+            DocumentContext.objects.create(
+                conversation=conversation,
+                context_data={}
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'conversation': {
+                    'id': str(conversation.id),
+                    'title': conversation.title,
+                    'is_active': conversation.is_active,
+                    'message_count': 0,
+                    'last_activity': conversation.last_activity.isoformat()
+                }
             })
             
         except (Session.DoesNotExist, DocumentSession.DoesNotExist):
             return JsonResponse({'error': 'Session not found'}, status=404)
         except Exception as e:
-            logger.error(f"Error clearing chat: {str(e)}")
+            logger.error(f"Error creating conversation: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    @staticmethod
+    @require_http_methods(["POST"])
+    def delete_conversation(request, conversation_id):
+        """Delete a conversation"""
+        try:
+            session_key = request.session.session_key
+            if not session_key:
+                return JsonResponse({'error': 'No active session'}, status=400)
+            
+            session_obj = Session.objects.get(session_key=session_key)
+            doc_session = DocumentSession.objects.get(session=session_obj)
+            
+            # Get the conversation to delete
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                session=doc_session
+            )
+            
+            # Check if this is the last conversation
+            total_conversations = doc_session.conversations.count()
+            if total_conversations <= 1:
+                return JsonResponse({
+                    'error': 'Cannot delete the last conversation'
+                }, status=400)
+            
+            was_active = conversation.is_active
+            
+            # Delete associated artifacts and documents
+            for message in conversation.messages.all():
+                message.generated_artifacts.all().delete()
+            
+            # Delete documents associated with this conversation
+            conversation.documents.all().delete()
+            
+            # Delete the conversation (this will cascade delete messages and context)
+            conversation.delete()
+            
+            # If we deleted the active conversation, activate another one
+            if was_active:
+                new_active = doc_session.conversations.filter(is_active=True).first()
+                if new_active:
+                    new_active.is_active = True
+                    new_active.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Conversation deleted successfully'
+            })
+            
+        except (Session.DoesNotExist, DocumentSession.DoesNotExist):
+            return JsonResponse({'error': 'Session not found'}, status=404)
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Error deleting conversation: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    @staticmethod
+    @require_http_methods(["POST"])
+    def rename_conversation(request, conversation_id):
+        """Rename a conversation"""
+        try:
+            session_key = request.session.session_key
+            if not session_key:
+                return JsonResponse({'error': 'No active session'}, status=400)
+            
+            session_obj = Session.objects.get(session_key=session_key)
+            doc_session = DocumentSession.objects.get(session=session_obj)
+            
+            # Get the conversation to rename
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                session=doc_session
+            )
+            
+            # Get new title
+            new_title = request.POST.get('title', '').strip()
+            if not new_title:
+                return JsonResponse({'error': 'Title cannot be empty'}, status=400)
+            
+            conversation.title = new_title
+            conversation.save()
+            
+            return JsonResponse({
+                'success': True,
+                'conversation': {
+                    'id': str(conversation.id),
+                    'title': conversation.title
+                }
+            })
+            
+        except (Session.DoesNotExist, DocumentSession.DoesNotExist):
+            return JsonResponse({'error': 'Session not found'}, status=404)
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Error renaming conversation: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    @staticmethod
+    @require_http_methods(["POST"])
+    def switch_conversation(request, conversation_id):
+        """Switch to a different conversation"""
+        try:
+            session_key = request.session.session_key
+            if not session_key:
+                return JsonResponse({'error': 'No active session'}, status=400)
+            
+            session_obj = Session.objects.get(session_key=session_key)
+            doc_session = DocumentSession.objects.get(session=session_obj)
+            
+            # Get the conversation to switch to
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                session=doc_session
+            )
+            
+            # Deactivate all conversations for this session
+            Conversation.objects.filter(session=doc_session).update(is_active=False)
+            
+            # Activate the target conversation
+            conversation.is_active = True
+            conversation.update_activity()
+            conversation.save()
+            
+            return JsonResponse({
+                'success': True,
+                'redirect_url': '/'  # Redirect to main chat page to reload with new conversation
+            })
+            
+        except (Session.DoesNotExist, DocumentSession.DoesNotExist):
+            return JsonResponse({'error': 'Session not found'}, status=404)
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Error switching conversation: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    @staticmethod
+    @require_http_methods(["GET"])
+    def list_conversations(request):
+        """Get list of conversations for current session"""
+        try:
+            session_key = request.session.session_key
+            if not session_key:
+                return render(request, 'chat/partials/conversation_list_empty.html')
+            
+            session_obj = Session.objects.get(session_key=session_key)
+            doc_session = DocumentSession.objects.get(session=session_obj)
+            
+            conversations = doc_session.conversations.all().order_by('-last_activity')
+            active_conversation = conversations.first()
+            
+            context = {
+                'conversations': conversations,
+                'active_conversation': active_conversation
+            }
+            
+            return render(request, 'chat/partials/conversation_list_items.html', context)
+            
+        except (Session.DoesNotExist, DocumentSession.DoesNotExist):
+            return render(request, 'chat/partials/conversation_list_empty.html')
+        except Exception as e:
+            logger.error(f"Error listing conversations: {str(e)}")
+            return render(request, 'chat/partials/conversation_list_empty.html')
+    
+    @staticmethod
+    @require_http_methods(["GET"])
+    def list_conversations_json(request):
+        """Get list of conversations as JSON for API calls"""
+        try:
+            session_key = request.session.session_key
+            if not session_key:
+                return JsonResponse({'error': 'No active session'}, status=400)
+            
+            session_obj = Session.objects.get(session_key=session_key)
+            doc_session = DocumentSession.objects.get(session=session_obj)
+            
+            conversations = doc_session.conversations.all().order_by('-last_activity')
+            
+            conversation_list = []
+            for conv in conversations:
+                conversation_list.append({
+                    'id': str(conv.id),
+                    'title': conv.title,
+                    'is_active': conv.is_active,
+                    'message_count': conv.messages.count(),
+                    'document_count': conv.documents.count(),
+                    'last_message_preview': conv.get_last_message_preview(),
+                    'last_activity': conv.last_activity.isoformat()
+                })
+            
+            return JsonResponse({
+                'success': True,
+                'conversations': conversation_list
+            })
+            
+        except (Session.DoesNotExist, DocumentSession.DoesNotExist):
+            return JsonResponse({'error': 'Session not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Error listing conversations: {str(e)}")
             return JsonResponse({'error': str(e)}, status=500)

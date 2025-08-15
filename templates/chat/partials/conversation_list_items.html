@@ -1,0 +1,6 @@
+<!-- Conversations will be loaded here -->
+{% for conversation in conversations %}
+    {% include 'chat/partials/conversation_item.html' with conversation=conversation %}
+{% empty %}
+    {% include 'chat/partials/conversation_list_empty.html' %}
+{% endfor %}

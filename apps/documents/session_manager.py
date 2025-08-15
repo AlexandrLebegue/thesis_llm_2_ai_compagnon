@@ -37,7 +37,7 @@ class SessionManager:
     
     def can_add_document(self, file_size: int) -> Tuple[bool, str]:
         """Check if document can be added to session"""
-        current_count = self.doc_session.documents.count()
+        current_count = Document.objects.filter(conversation__session=self.doc_session).count()
         current_size = self.doc_session.total_size
         
         # Check document count limit
@@ -62,9 +62,23 @@ class SessionManager:
         if not can_add:
             raise ValueError(error_msg)
         
+        # Get or create active conversation for this session
+        from apps.chat.models import Conversation
+        conversation = Conversation.objects.filter(
+            session=self.doc_session,
+            is_active=True
+        ).first()
+        
+        if not conversation:
+            conversation = Conversation.objects.create(
+                session=self.doc_session,
+                title='Main Conversation',
+                is_active=True
+            )
+        
         # Create document record
         document = Document.objects.create(
-            session=self.doc_session,
+            conversation=conversation,
             original_name=file.name,
             file_size=file.size,
             document_type=document_type,
@@ -92,7 +106,7 @@ class SessionManager:
         try:
             document = Document.objects.get(
                 id=document_id,
-                session=self.doc_session
+                conversation__session=self.doc_session
             )
             
             # Delete file from storage
@@ -114,14 +128,14 @@ class SessionManager:
     
     def update_session_totals(self):
         """Update document count and total size for session"""
-        documents = self.doc_session.documents.all()
+        documents = Document.objects.filter(conversation__session=self.doc_session)
         self.doc_session.document_count = documents.count()
         self.doc_session.total_size = sum(doc.file_size for doc in documents)
         self.doc_session.save()
     
     def get_session_info(self) -> Dict[str, Any]:
         """Get session information and statistics"""
-        documents = self.doc_session.documents.all()
+        documents = Document.objects.filter(conversation__session=self.doc_session)
         
         status_counts = {}
         for status_choice in Document.STATUS_CHOICES:
@@ -164,7 +178,7 @@ class SessionManager:
                     pass  # Directory not empty or doesn't exist
             
             # Delete document records
-            self.doc_session.documents.all().delete()
+            Document.objects.filter(conversation__session=self.doc_session).delete()
             
             # Delete document session
             if force:
@@ -248,7 +262,7 @@ class SessionManager:
     
     def get_document_list(self) -> List[Dict[str, Any]]:
         """Get list of documents in session with details"""
-        documents = self.doc_session.documents.all().order_by('-uploaded_at')
+        documents = Document.objects.filter(conversation__session=self.doc_session).order_by('-uploaded_at')
         
         document_list = []
         for doc in documents:

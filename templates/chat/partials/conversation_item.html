@@ -1,0 +1,207 @@
+<!-- Individual Conversation Item - Condensed -->
+<div class="conversation-item relative group rounded-md border transition-all duration-200 hover:shadow-sm"
+     :class="'{{ conversation.id }}' === activeConversationId ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-200 hover:border-gray-300'"
+     x-data="conversationItem('{{ conversation.id }}', '{{ conversation.title|escapejs }}')">
+    
+    <!-- Main conversation content -->
+    <div class="p-2 cursor-pointer"
+         @click="switchConversation('{{ conversation.id }}')"
+         role="button"
+         tabindex="0"
+         :aria-label="`Switch to conversation: {{ conversation.title|escapejs }}`"
+         @keydown.enter="switchConversation('{{ conversation.id }}')"
+         @keydown.space.prevent="switchConversation('{{ conversation.id }}')">
+        
+        <!-- Conversation title and active indicator -->
+        <div class="flex items-center justify-between mb-1">
+            <h4 class="text-xs font-medium truncate pr-1"
+                :class="'{{ conversation.id }}' === activeConversationId ? 'text-blue-900' : 'text-gray-900'">
+                {{ conversation.title }}
+            </h4>
+            
+            <!-- Active indicator -->
+            <div x-show="'{{ conversation.id }}' === activeConversationId"
+                 class="flex-shrink-0 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+        </div>
+        
+        <!-- Compact stats row -->
+        <div class="flex items-center justify-between text-xs text-gray-500">
+            <div class="flex items-center space-x-2">
+                <!-- Message count -->
+                <span class="flex items-center">
+                    <svg class="h-2.5 w-2.5 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                    </svg>
+                    {{ conversation.messages.count }}
+                </span>
+                
+                <!-- Document count -->
+                <span class="flex items-center">
+                    <svg class="h-2.5 w-2.5 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    {{ conversation.get_document_count }}
+                </span>
+            </div>
+            
+            <!-- Last activity -->
+            <span class="text-xs truncate max-w-16">
+                {{ conversation.last_activity|timesince|slice:":10" }}
+            </span>
+        </div>
+    </div>
+    
+    <!-- Compact action buttons (visible on hover) -->
+    <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-0.5">
+        
+        <!-- Rename button -->
+        <button @click.stop="startRename()"
+                class="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                title="Rename conversation"
+                aria-label="Rename conversation">
+            <svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+            </svg>
+        </button>
+        
+        <!-- Delete button -->
+        <button @click.stop="deleteConversation()"
+                class="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                title="Delete conversation"
+                aria-label="Delete conversation">
+            <svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+        </button>
+    </div>
+    
+    <!-- Compact inline rename form (hidden by default) -->
+    <div x-show="isRenaming" class="p-2 border-t border-gray-200">
+        <form @submit.prevent="submitRename()" class="space-y-1">
+            <input type="text"
+                   x-model="newTitle"
+                   x-ref="renameInput"
+                   class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                   placeholder="Enter new title"
+                   maxlength="200"
+                   required>
+            <div class="flex space-x-1">
+                <button type="submit"
+                        class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
+                        :disabled="!newTitle.trim()">
+                    Save
+                </button>
+                <button type="button"
+                        @click="cancelRename()"
+                        class="px-2 py-0.5 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400 focus:outline-none">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function conversationItem(conversationId, initialTitle) {
+    return {
+        conversationId: conversationId,
+        isRenaming: false,
+        newTitle: initialTitle,
+        
+        startRename() {
+            this.isRenaming = true;
+            this.newTitle = initialTitle;
+            this.$nextTick(() => {
+                this.$refs.renameInput.focus();
+                this.$refs.renameInput.select();
+            });
+        },
+        
+        cancelRename() {
+            this.isRenaming = false;
+            this.newTitle = initialTitle;
+        },
+        
+        async submitRename() {
+            if (!this.newTitle.trim()) return;
+            
+            try {
+                const response = await fetch(`/conversations/${this.conversationId}/rename/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: `title=${encodeURIComponent(this.newTitle.trim())}`
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.isRenaming = false;
+                    // Trigger conversation list refresh
+                    document.body.dispatchEvent(new CustomEvent('conversation-updated'));
+                } else {
+                    alert('Error renaming conversation: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error renaming conversation:', error);
+                alert('Error renaming conversation');
+            }
+        },
+        
+        async deleteConversation() {
+            if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/conversations/${this.conversationId}/delete/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Trigger conversation list refresh
+                    document.body.dispatchEvent(new CustomEvent('conversation-updated'));
+                    // If this was the active conversation, reload the page
+                    if (this.conversationId === window.activeConversationId) {
+                        window.location.reload();
+                    }
+                } else {
+                    alert('Error deleting conversation: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error deleting conversation:', error);
+                alert('Error deleting conversation');
+            }
+        },
+        
+        async switchConversation(conversationId) {
+            try {
+                const response = await fetch(`/conversations/${conversationId}/switch/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.href = data.redirect_url || '/';
+                } else {
+                    alert('Error switching conversation: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error switching conversation:', error);
+                alert('Error switching conversation');
+            }
+        }
+    }
+}
+</script>

@@ -1,0 +1,55 @@
+{% if error %}
+    <div class="text-center py-2">
+        <p class="text-xs text-red-600">{{ error }}</p>
+    </div>
+{% elif documents %}
+    {% for document in documents %}
+        <div class="flex items-center justify-between py-1 px-2 bg-gray-50 rounded text-xs hover:bg-gray-100 transition-colors duration-200">
+            <!-- Document icon and name -->
+            <div class="flex items-center space-x-2 flex-1 min-w-0">
+                <!-- Compact file type icon -->
+                <div class="flex-shrink-0">
+                    {% if document.document_type == 'pdf' %}
+                        <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                    {% elif document.document_type == 'xlsx' %}
+                        <svg class="h-3 w-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    {% elif document.document_type == 'docx' %}
+                        <svg class="h-3 w-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    {% else %}
+                        <svg class="h-3 w-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                    {% endif %}
+                </div>
+                
+                <!-- Document name (truncated) -->
+                <span class="text-gray-700 truncate" title="{{ document.original_name }}">
+                    {{ document.original_name|slice:":20" }}{% if document.original_name|length > 20 %}...{% endif %}
+                </span>
+            </div>
+            
+            <!-- Status indicator -->
+            <div class="flex-shrink-0">
+                {% if document.status == 'ready' %}
+                    <span class="w-2 h-2 bg-green-500 rounded-full" title="Ready"></span>
+                {% elif document.status == 'processing' %}
+                    <span class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" title="Processing"></span>
+                {% elif document.status == 'error' %}
+                    <span class="w-2 h-2 bg-red-500 rounded-full" title="Error"></span>
+                {% else %}
+                    <span class="w-2 h-2 bg-gray-400 rounded-full" title="Pending"></span>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="text-center py-2">
+        <p class="text-xs text-gray-500">No documents uploaded</p>
+    </div>
+{% endif %}

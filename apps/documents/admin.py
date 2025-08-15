@@ -23,14 +23,14 @@ class DocumentSessionAdmin(admin.ModelAdmin):
 class DocumentAdmin(admin.ModelAdmin):
     list_display = ['original_name', 'document_type', 'status', 'file_size_mb', 'uploaded_at']
     list_filter = ['document_type', 'status', 'uploaded_at']
-    search_fields = ['original_name', 'session__session__session_key']
+    search_fields = ['original_name', 'conversation__session__session__session_key']
     readonly_fields = ['id', 'uploaded_at', 'processed_at']
     list_editable = ['status']
     ordering = ['-uploaded_at']
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('id', 'session', 'original_name', 'document_type', 'status')
+            'fields': ('id', 'conversation', 'original_name', 'document_type', 'status')
         }),
         ('File Details', {
             'fields': ('file_path', 'file_size', 'uploaded_at', 'processed_at')
@@ -52,13 +52,13 @@ class DocumentAdmin(admin.ModelAdmin):
 
 @admin.register(DocumentContext)
 class DocumentContextAdmin(admin.ModelAdmin):
-    list_display = ['session_key', 'document_count', 'last_updated']
-    readonly_fields = ['session', 'last_updated']
+    list_display = ['conversation_title', 'document_count', 'last_updated']
+    readonly_fields = ['conversation', 'last_updated']
     ordering = ['-last_updated']
     
     fieldsets = (
-        ('Session Information', {
-            'fields': ('session', 'last_updated')
+        ('Conversation Information', {
+            'fields': ('conversation', 'last_updated')
         }),
         ('Context Data', {
             'fields': ('context_data',),
@@ -66,9 +66,9 @@ class DocumentContextAdmin(admin.ModelAdmin):
         }),
     )
     
-    def session_key(self, obj):
-        return obj.session.session.session_key[:10] + '...' if len(obj.session.session.session_key) > 10 else obj.session.session.session_key
-    session_key.short_description = 'Session Key'
+    def conversation_title(self, obj):
+        return obj.conversation.title
+    conversation_title.short_description = 'Conversation'
     
     def document_count(self, obj):
         return obj.context_data.get('document_count', 0)

@@ -4,10 +4,11 @@ from .models import Conversation, Message, Artifact
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ['id_short', 'session_key', 'started_at', 'last_activity', 'message_count']
-    list_filter = ['started_at', 'last_activity']
-    search_fields = ['id', 'session__session__session_key']
+    list_display = ['id_short', 'title', 'session_key', 'is_active', 'started_at', 'last_activity', 'message_count']
+    list_filter = ['is_active', 'started_at', 'last_activity']
+    search_fields = ['id', 'title', 'session__session__session_key']
     readonly_fields = ['id', 'started_at', 'last_activity']
+    list_editable = ['is_active', 'title']
     ordering = ['-last_activity']
     
     def id_short(self, obj):

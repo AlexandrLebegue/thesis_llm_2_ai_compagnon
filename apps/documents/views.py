@@ -50,8 +50,10 @@ class DocumentView:
             except ValueError as e:
                 return JsonResponse({'error': str(e)}, status=400)
             
-            # Check document limit
-            if doc_session.documents.count() >= settings.MAX_DOCUMENTS_PER_SESSION:
+            # Check document limit across all conversations in session
+            from apps.documents.models import Document
+            document_count = Document.objects.filter(conversation__session=doc_session).count()
+            if document_count >= settings.MAX_DOCUMENTS_PER_SESSION:
                 return JsonResponse({
                     'error': f'Maximum {settings.MAX_DOCUMENTS_PER_SESSION} documents allowed per session'
                 }, status=400)
@@ -63,9 +65,23 @@ class DocumentView:
                     'error': 'Session storage limit exceeded (100MB max)'
                 }, status=400)
             
+            # Get or create active conversation for this session
+            from apps.chat.models import Conversation
+            conversation = Conversation.objects.filter(
+                session=doc_session,
+                is_active=True
+            ).first()
+            
+            if not conversation:
+                conversation = Conversation.objects.create(
+                    session=doc_session,
+                    title='Main Conversation',
+                    is_active=True
+                )
+            
             # Create document record
             document = Document.objects.create(
-                session=doc_session,
+                conversation=conversation,
                 original_name=uploaded_file.name,
                 file_size=uploaded_file.size,
                 document_type=uploaded_file.name.split('.')[-1].lower(),
@@ -79,8 +95,10 @@ class DocumentView:
             document.save()
             
             # Update session totals
-            doc_session.document_count = doc_session.documents.count()
-            doc_session.total_size = doc_session.documents.aggregate(
+            from apps.documents.models import Document
+            session_documents = Document.objects.filter(conversation__session=doc_session)
+            doc_session.document_count = session_documents.count()
+            doc_session.total_size = session_documents.aggregate(
                 total=models.Sum('file_size')
             )['total'] or 0
             doc_session.save()
@@ -161,9 +179,11 @@ class DocumentView:
                 logger.warning(f"Failed to delete file {document.file_path}: {str(e)}")
             
             # Update session totals before deleting
-            doc_session = document.session
-            doc_session.document_count = doc_session.documents.exclude(id=document.id).count()
-            doc_session.total_size = doc_session.documents.exclude(id=document.id).aggregate(
+            doc_session = document.conversation.session
+            from apps.documents.models import Document
+            session_documents = Document.objects.filter(conversation__session=doc_session).exclude(id=document.id)
+            doc_session.document_count = session_documents.count()
+            doc_session.total_size = session_documents.aggregate(
                 total=models.Sum('file_size')
             )['total'] or 0
             doc_session.save()
@@ -242,11 +262,28 @@ class DocumentView:
                     return render(request, 'chat/partials/document_list.html', {'documents': []})
                 return JsonResponse({'documents': []})
             
-            documents = doc_session.documents.all()
+            # Get documents only from the active conversation in this session
+            from apps.documents.models import Document
+            from apps.chat.models import Conversation
+            
+            # Get the active conversation for this session
+            active_conversation = Conversation.objects.filter(
+                session=doc_session,
+                is_active=True
+            ).first()
+            
+            if active_conversation:
+                documents = Document.objects.filter(conversation=active_conversation)
+            else:
+                # If no active conversation, show no documents
+                documents = Document.objects.none()
             
             # Check if this is an HTMX request
             if request.headers.get('HX-Request'):
-                return render(request, 'chat/partials/document_list.html', {'documents': documents})
+                # Check if compact view is requested
+                compact = request.GET.get('compact') == 'true'
+                template = 'chat/partials/document_list_compact.html' if compact else 'chat/partials/document_list.html'
+                return render(request, template, {'documents': documents})
             
             # For non-HTMX requests, return JSON
             document_list = []
