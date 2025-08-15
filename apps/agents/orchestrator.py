@@ -105,6 +105,8 @@ class ChatbotOrchestrator:
                 # Validate result
                 if result is None:
                     logger.warning("Agent returned None result")
+                    # Cleanup any orphaned files from failed execution
+                    self._cleanup_orphaned_artifacts(files_before, self._get_temp_files_snapshot(temp_dir))
                     return {
                         'status': 'error',
                         'error': 'Agent returned no response'
@@ -116,18 +118,31 @@ class ChatbotOrchestrator:
                 # Track temp directory state after agent execution
                 files_after = self._get_temp_files_snapshot(temp_dir)
                 
-                # Extract artifacts from multiple sources
+                # Extract artifacts from multiple sources first
                 artifacts = self._extract_artifacts_enhanced(result, files_before, files_after)
                 
-                # Create Artifact database records if message is provided
+                # Validate tool execution status using the artifacts as evidence
+                tool_execution_successful = self._validate_tool_execution_status(result_str, artifacts)
+                
+                # Only filter artifacts if we detect actual execution failures
+                # (not just lack of success keywords)
+                if not tool_execution_successful:
+                    logger.warning("Tool execution failure detected - filtering artifacts")
+                    artifacts = self._filter_artifacts_for_failed_tools(artifacts, result_str)
+                
+                # Create Artifact database records if message is provided and artifacts are valid
                 if message and artifacts:
                     self._create_artifact_records(artifacts, message, result)
+                elif not tool_execution_successful:
+                    # Cleanup orphaned files from failed tools
+                    self._cleanup_orphaned_artifacts(files_before, files_after)
                 
                 # Process results
                 return {
                     'status': 'success',
                     'result': result_str,
-                    'artifacts': artifacts
+                    'artifacts': artifacts,
+                    'tool_execution_successful': tool_execution_successful
                 }
                 
             except AttributeError as attr_error:
@@ -263,17 +278,124 @@ class ChatbotOrchestrator:
             code_artifacts = self._extract_artifacts_from_code_output(result)
             artifacts.extend(code_artifacts)
         
-        # Remove duplicates while preserving order
-        seen_paths = set()
+        # Enhanced deduplication with path normalization
+        unique_artifacts = self._deduplicate_artifacts_robust(artifacts)
+        
+        logger.info(f"Enhanced artifact extraction found {len(unique_artifacts)} unique artifacts from {len(artifacts)} total detections")
+        for i, artifact in enumerate(unique_artifacts):
+            logger.debug(f"  Unique artifact {i+1}: {artifact.get('name', 'unknown')} ({artifact.get('type', 'unknown')})")
+        
+        return unique_artifacts
+    
+    def _deduplicate_artifacts_robust(self, artifacts: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Robust deduplication with path normalization and validation
+        
+        This method handles:
+        - Path normalization (backslash vs forward slash)
+        - Relative vs absolute path matching
+        - Case sensitivity on Windows
+        - File existence validation
+        - Detection source tracking
+        """
+        import os
+        from pathlib import Path
+        
+        # Track detection sources for debugging
+        detection_sources = {}
+        normalized_paths = {}
         unique_artifacts = []
+        
         for artifact in artifacts:
             path = artifact.get('path', '')
-            if path and path not in seen_paths:
-                seen_paths.add(path)
-                unique_artifacts.append(artifact)
+            if not path:
+                continue
+                
+            # Normalize the path for comparison
+            try:
+                # Convert to absolute path if relative
+                if not os.path.isabs(path):
+                    path = os.path.abspath(path)
+                
+                # Normalize path separators and case
+                normalized_path = os.path.normpath(path).lower()
+                
+                # Validate file exists and is not empty
+                if not self._validate_artifact_file(path):
+                    logger.debug(f"Skipping invalid artifact: {path}")
+                    continue
+                
+                # Check for duplicates
+                if normalized_path in normalized_paths:
+                    # Log duplicate detection
+                    existing_source = detection_sources.get(normalized_path, 'unknown')
+                    current_source = artifact.get('type', 'unknown')
+                    logger.debug(f"Duplicate artifact detected: {Path(path).name}")
+                    logger.debug(f"  First detected by: {existing_source}")
+                    logger.debug(f"  Also detected by: {current_source}")
+                    continue
+                
+                # Add to unique artifacts
+                normalized_paths[normalized_path] = path
+                detection_sources[normalized_path] = artifact.get('type', 'unknown')
+                
+                # Enhance artifact with normalized path
+                enhanced_artifact = artifact.copy()
+                enhanced_artifact['normalized_path'] = normalized_path
+                enhanced_artifact['detection_source'] = artifact.get('type', 'unknown')
+                
+                unique_artifacts.append(enhanced_artifact)
+                
+            except Exception as e:
+                logger.warning(f"Error processing artifact path '{path}': {e}")
+                continue
         
-        logger.info(f"Enhanced artifact extraction found {len(unique_artifacts)} unique artifacts")
+        if len(artifacts) != len(unique_artifacts):
+            logger.info(f"Deduplication removed {len(artifacts) - len(unique_artifacts)} duplicate artifacts")
+        
         return unique_artifacts
+    
+    def _validate_artifact_file(self, file_path: str) -> bool:
+        """
+        Validate that an artifact file is valid for registration
+        
+        Checks:
+        - File exists
+        - File is not empty
+        - File is readable
+        - File is in expected temp directory (security)
+        """
+        try:
+            path_obj = Path(file_path)
+            
+            # Check if file exists
+            if not path_obj.exists():
+                return False
+            
+            # Check if file is not empty
+            if path_obj.stat().st_size == 0:
+                logger.debug(f"Artifact file is empty: {file_path}")
+                return False
+            
+            # Security check: ensure file is in temp directory
+            temp_dir = os.path.abspath('temp')
+            file_abs_path = os.path.abspath(file_path)
+            if not file_abs_path.startswith(temp_dir):
+                logger.warning(f"Artifact file outside temp directory: {file_path}")
+                return False
+            
+            # Check if file is readable
+            try:
+                with open(file_path, 'rb') as f:
+                    f.read(1)  # Try to read one byte
+                return True
+            except (PermissionError, IOError) as e:
+                logger.debug(f"Artifact file not readable: {file_path} - {e}")
+                return False
+                
+        except Exception as e:
+            logger.debug(f"Error validating artifact file {file_path}: {e}")
+            return False
     
     def _extract_artifacts_from_filesystem(self, files_before: Dict[str, float], files_after: Dict[str, float]) -> List[Dict[str, str]]:
         """Extract artifacts by comparing filesystem state"""
@@ -467,35 +589,45 @@ class ChatbotOrchestrator:
         return artifacts
 
     def _create_artifact_records(self, artifacts: List[Dict[str, str]], message, agent_result=None) -> None:
-        """Create Artifact database records for generated files"""
+        """Create Artifact database records for generated files with duplicate prevention"""
         from apps.chat.models import Artifact
+        from django.db import IntegrityError
         
         successful_artifacts = 0
         failed_artifacts = 0
+        duplicate_artifacts = 0
         
         for artifact_data in artifacts:
             try:
                 file_path = Path(artifact_data['path'])
                 
-                # Enhanced validation and logging
-                if not file_path.exists():
-                    logger.warning(f"Artifact registration failed - file not found: {file_path} (type: {artifact_data.get('type', 'unknown')})")
+                # Use enhanced validation from deduplication process
+                if not self._validate_artifact_file(str(file_path)):
+                    logger.warning(f"Artifact registration failed - validation failed: {file_path} (type: {artifact_data.get('detection_source', 'unknown')})")
                     failed_artifacts += 1
                     continue
                 
                 # Get file metadata with error handling
                 try:
                     file_size = file_path.stat().st_size
-                    if file_size == 0:
-                        logger.warning(f"Artifact registration skipped - empty file: {file_path}")
-                        failed_artifacts += 1
-                        continue
                 except OSError as stat_error:
                     logger.error(f"Artifact registration failed - cannot stat file {file_path}: {stat_error}")
                     failed_artifacts += 1
                     continue
                 
                 mime_type = self._get_mime_type(file_path)
+                
+                # Check for existing artifacts with same file path for this message
+                normalized_path = artifact_data.get('normalized_path', str(file_path).lower())
+                existing_artifacts = Artifact.objects.filter(
+                    message=message,
+                    file_path__iexact=str(file_path)
+                ).exists()
+                
+                if existing_artifacts:
+                    duplicate_artifacts += 1
+                    logger.debug(f"Artifact already exists for message: {file_path.name}")
+                    continue
                 
                 # Extract preview HTML for Word and Excel documents
                 preview_html = None
@@ -507,39 +639,194 @@ class ChatbotOrchestrator:
                     preview_html = self._extract_preview_html(file_path, agent_result)
                 
                 # Create Artifact record with enhanced error handling
-                artifact = Artifact.objects.create(
-                    message=message,
-                    file_path=str(file_path),
-                    file_name=file_path.name,
-                    file_type=mime_type,
-                    file_size=file_size,
-                    preview_html=preview_html,
-                    expires_at=timezone.now() + timedelta(hours=24)  # 24-hour expiration
-                )
-                
-                successful_artifacts += 1
-                logger.info(f"[OK] Artifact registered successfully: {artifact.file_name} ({artifact.file_size} bytes, type: {artifact_data.get('type', 'unknown')})")
+                try:
+                    artifact = Artifact.objects.create(
+                        message=message,
+                        file_path=str(file_path),
+                        file_name=file_path.name,
+                        file_type=mime_type,
+                        file_size=file_size,
+                        preview_html=preview_html,
+                        expires_at=timezone.now() + timedelta(hours=24)  # 24-hour expiration
+                    )
+                    
+                    successful_artifacts += 1
+                    detection_source = artifact_data.get('detection_source', 'unknown')
+                    logger.info(f"[OK] Artifact registered: {artifact.file_name} ({artifact.file_size} bytes, detected by: {detection_source})")
+                    
+                except IntegrityError as integrity_error:
+                    # Handle rare race condition where duplicate is created between check and insert
+                    duplicate_artifacts += 1
+                    logger.debug(f"Artifact registration prevented duplicate: {file_path.name} - {integrity_error}")
                 
             except Exception as e:
                 failed_artifacts += 1
                 logger.error(f"[FAIL] Artifact registration failed for {artifact_data.get('path', 'unknown path')}: {str(e)}", exc_info=True)
         
-        # Summary logging
-        total_artifacts = successful_artifacts + failed_artifacts
-        if total_artifacts > 0:
-            logger.info(f"Artifact registration summary: {successful_artifacts}/{total_artifacts} successful, {failed_artifacts} failed")
+        # Enhanced summary logging
+        total_attempts = successful_artifacts + failed_artifacts + duplicate_artifacts
+        if total_attempts > 0:
+            logger.info(f"Artifact registration summary: {successful_artifacts} registered, {duplicate_artifacts} duplicates prevented, {failed_artifacts} failed ({total_attempts} total)")
+        
+        # Log detection method effectiveness
+        detection_methods = {}
+        for artifact_data in artifacts:
+            method = artifact_data.get('detection_source', 'unknown')
+            detection_methods[method] = detection_methods.get(method, 0) + 1
+        
+        if detection_methods:
+            logger.debug(f"Detection method breakdown: {detection_methods}")
         
         # Update message metadata with artifact counts
         if hasattr(message, 'artifacts') and isinstance(message.artifacts, list):
             # Add artifact count metadata to the message
             artifact_summary = {
-                'total_generated': total_artifacts,
+                'total_generated': total_attempts,
                 'successfully_registered': successful_artifacts,
-                'failed_registration': failed_artifacts
+                'failed_registration': failed_artifacts,
+                'duplicates_prevented': duplicate_artifacts
             }
             if not any(item.get('summary') for item in message.artifacts if isinstance(item, dict)):
                 message.artifacts.append({'summary': artifact_summary})
                 message.save()
+
+    def _validate_tool_execution_status(self, result_str: str, artifacts: list = None) -> bool:
+        """
+        Robust tool execution validation based on actual file creation and tool outputs
+        
+        This method validates tool success by checking:
+        1. First, check for critical parsing errors (highest priority)
+        2. Then validate if detected artifacts are actually valid files
+        3. Finally, assume success if no obvious problems detected
+        
+        Args:
+            result_str: Agent result (used minimally)
+            artifacts: List of detected artifacts to validate
+            
+        Returns:
+            bool: True if tools executed successfully
+        """
+        if not result_str:
+            return False
+        
+        result_lower = result_str.lower()
+        
+        # Strategy 1: Check for critical parsing errors FIRST
+        # These indicate the agent itself failed and override everything else
+        critical_errors = [
+            'error in code parsing',
+            'invalid code snippet',
+            'regex pattern',
+            'was not found in it',
+            'make sure to include code'
+        ]
+        
+        for error_pattern in critical_errors:
+            if error_pattern in result_lower:
+                logger.debug(f"Critical agent parsing error detected: '{error_pattern}' found in result")
+                return False
+        
+        # Strategy 2: If we have valid artifacts, tools likely succeeded
+        if artifacts:
+            valid_artifacts = 0
+            for artifact in artifacts:
+                file_path = artifact.get('path', '')
+                if file_path and self._validate_artifact_file(file_path):
+                    valid_artifacts += 1
+            
+            # If we have valid files and no critical errors, execution was successful
+            if valid_artifacts > 0:
+                logger.debug(f"Tool execution validated: {valid_artifacts} valid artifacts created")
+                return True
+        
+        # Strategy 3: If no artifacts but no obvious errors, assume success
+        # This handles cases where tools don't create files (e.g., analysis tools)
+        logger.debug("Tool execution assumed successful: no obvious failures detected")
+        return True
+
+    def _filter_artifacts_for_failed_tools(self, artifacts: List[Dict[str, str]], result_str: str) -> List[Dict[str, str]]:
+        """
+        Filter artifacts when tools have failed execution
+        
+        This method helps prevent registration of invalid artifacts from failed tool executions
+        while still allowing valid artifacts that were created successfully.
+        """
+        if not artifacts:
+            return artifacts
+        
+        filtered_artifacts = []
+        result_lower = result_str.lower()
+        
+        for artifact in artifacts:
+            file_path = artifact.get('path', '')
+            file_name = Path(file_path).name if file_path else ''
+            
+            # Always validate the file regardless of failure status
+            if not self._validate_artifact_file(file_path):
+                logger.debug(f"Filtered out invalid artifact from failed tool: {file_name}")
+                continue
+            
+            # Check if this specific file is mentioned positively in the result
+            if file_name.lower() in result_lower:
+                # Look for positive context around this file mention
+                context_start = max(0, result_lower.find(file_name.lower()) - 50)
+                context_end = min(len(result_lower), result_lower.find(file_name.lower()) + len(file_name) + 50)
+                context = result_lower[context_start:context_end]
+                
+                if any(indicator in context for indicator in ['successfully', 'created', 'generated', 'saved']):
+                    filtered_artifacts.append(artifact)
+                    logger.debug(f"Kept artifact with positive context: {file_name}")
+                else:
+                    logger.debug(f"Filtered out artifact without positive context: {file_name}")
+            else:
+                # File not mentioned in result - likely from filesystem detection of orphaned file
+                logger.debug(f"Filtered out unmentioned artifact from failed tool: {file_name}")
+        
+        logger.info(f"Filtered artifacts for failed tools: {len(filtered_artifacts)} kept out of {len(artifacts)} total")
+        return filtered_artifacts
+
+    def _cleanup_orphaned_artifacts(self, files_before: Dict[str, float], files_after: Dict[str, float]) -> None:
+        """
+        Clean up orphaned files from failed tool executions
+        
+        This method removes temporary files that were created during failed tool executions
+        to prevent them from being detected as artifacts in future runs.
+        """
+        try:
+            import time
+            
+            # Find new files created during execution
+            new_files = set(files_after.keys()) - set(files_before.keys())
+            
+            cleaned_count = 0
+            for file_path in new_files:
+                try:
+                    path_obj = Path(file_path)
+                    if path_obj.exists():
+                        # Additional safety check - only clean files in temp directory
+                        temp_dir = os.path.abspath('temp')
+                        file_abs_path = os.path.abspath(file_path)
+                        
+                        if file_abs_path.startswith(temp_dir):
+                            # Check if file is very recent (created within last few minutes)
+                            file_age = time.time() - path_obj.stat().st_mtime
+                            if file_age < 300:  # Less than 5 minutes old
+                                path_obj.unlink()
+                                cleaned_count += 1
+                                logger.debug(f"Cleaned up orphaned file: {path_obj.name}")
+                            else:
+                                logger.debug(f"Skipped cleanup of older file: {path_obj.name}")
+                        else:
+                            logger.warning(f"Skipped cleanup of file outside temp directory: {file_path}")
+                except Exception as cleanup_error:
+                    logger.debug(f"Error cleaning up file {file_path}: {cleanup_error}")
+                    continue
+            
+            if cleaned_count > 0:
+                logger.info(f"Cleaned up {cleaned_count} orphaned files from failed tool execution")
+                
+        except Exception as e:
+            logger.warning(f"Error during orphaned artifact cleanup: {e}")
 
     def _get_mime_type(self, file_path: Path) -> str:
         """Determine MIME type for file"""
