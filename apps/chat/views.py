@@ -314,6 +314,134 @@ class ChatView:
             return HttpResponse('View failed', status=500)
     
     @staticmethod
+    @require_http_methods(["GET"])
+    def view_word_preview(request, artifact_id):
+        """View Word document preview as HTML"""
+        try:
+            # Get artifact
+            artifact = Artifact.objects.get(id=artifact_id)
+            
+            # Check if artifact belongs to current session
+            session_key = request.session.session_key
+            if not session_key:
+                return HttpResponse('Session not found', status=404)
+            
+            # Verify artifact belongs to user's session
+            message_session = artifact.message.conversation.session.session.session_key
+            if message_session != session_key:
+                return HttpResponse('Artifact not found', status=404)
+            
+            # Check if this is a Word document
+            if not (artifact.file_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    or 'word' in artifact.file_type.lower()
+                    or artifact.file_name.lower().endswith('.docx')):
+                return HttpResponse('Not a Word document', status=400)
+            
+            # Get preview HTML
+            if artifact.preview_html:
+                # Serve the stored preview HTML
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <title>Word Document Preview - {artifact.file_name}</title>
+                    <style>
+                        body {{
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            max-width: 800px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            background-color: #f9f9f9;
+                        }}
+                        .preview-container {{
+                            background: white;
+                            padding: 30px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }}
+                        .preview-h1 {{ font-size: 2em; margin-bottom: 0.5em; color: #2c3e50; }}
+                        .preview-h2 {{ font-size: 1.5em; margin-bottom: 0.5em; color: #34495e; }}
+                        .preview-h3 {{ font-size: 1.2em; margin-bottom: 0.5em; color: #34495e; }}
+                        .preview-paragraph {{ margin-bottom: 1em; }}
+                        .preview-table {{
+                            border-collapse: collapse;
+                            width: 100%;
+                            margin: 1em 0;
+                        }}
+                        .preview-table th, .preview-table td {{
+                            border: 1px solid #ddd;
+                            padding: 8px;
+                            text-align: left;
+                        }}
+                        .preview-table th {{
+                            background-color: #f2f2f2;
+                            font-weight: bold;
+                        }}
+                        .preview-list {{ margin: 1em 0; padding-left: 2em; }}
+                        .preview-quote {{
+                            border-left: 4px solid #3498db;
+                            margin: 1em 0;
+                            padding-left: 1em;
+                            font-style: italic;
+                        }}
+                        .preview-truncated {{
+                            margin-top: 2em;
+                            padding: 1em;
+                            background-color: #f8f9fa;
+                            border-left: 4px solid #007bff;
+                            color: #6c757d;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="preview-container">
+                        <h1 style="border-bottom: 2px solid #3498db; padding-bottom: 10px;">
+                            {artifact.file_name}
+                        </h1>
+                        {artifact.preview_html}
+                    </div>
+                </body>
+                </html>
+                """
+                
+                response = HttpResponse(html_content, content_type='text/html')
+                # Allow iframe embedding from same origin to fix Firefox security issue
+                response['X-Frame-Options'] = 'SAMEORIGIN'
+                return response
+            else:
+                # No preview available
+                return HttpResponse('''
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <title>Preview Not Available</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                            .message { background: #f8f9fa; padding: 20px; border-radius: 8px; display: inline-block; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="message">
+                            <h2>Preview Not Available</h2>
+                            <p>This Word document doesn't have a preview available.</p>
+                            <p>Please download the document to view its contents.</p>
+                        </div>
+                    </body>
+                    </html>
+                ''', content_type='text/html')
+                
+        except Artifact.DoesNotExist:
+            return HttpResponse('Artifact not found', status=404)
+        except Exception as e:
+            logger.error(f"Error viewing Word preview {artifact_id}: {str(e)}")
+            return HttpResponse('Preview failed', status=500)
+    
+    @staticmethod
     @require_http_methods(["POST"])
     def clear_chat(request):
         """Clear chat history for current session"""

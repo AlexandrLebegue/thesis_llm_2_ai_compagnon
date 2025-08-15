@@ -121,7 +121,7 @@ class ChatbotOrchestrator:
                 
                 # Create Artifact database records if message is provided
                 if message and artifacts:
-                    self._create_artifact_records(artifacts, message)
+                    self._create_artifact_records(artifacts, message, result)
                 
                 # Process results
                 return {
@@ -466,7 +466,7 @@ class ChatbotOrchestrator:
         
         return artifacts
 
-    def _create_artifact_records(self, artifacts: List[Dict[str, str]], message) -> None:
+    def _create_artifact_records(self, artifacts: List[Dict[str, str]], message, agent_result=None) -> None:
         """Create Artifact database records for generated files"""
         from apps.chat.models import Artifact
         
@@ -497,6 +497,12 @@ class ChatbotOrchestrator:
                 
                 mime_type = self._get_mime_type(file_path)
                 
+                # Extract preview HTML for Word documents
+                preview_html = None
+                if (mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or
+                    file_path.suffix.lower() == '.docx'):
+                    preview_html = self._extract_preview_html(file_path, agent_result)
+                
                 # Create Artifact record with enhanced error handling
                 artifact = Artifact.objects.create(
                     message=message,
@@ -504,6 +510,7 @@ class ChatbotOrchestrator:
                     file_name=file_path.name,
                     file_type=mime_type,
                     file_size=file_size,
+                    preview_html=preview_html,
                     expires_at=timezone.now() + timedelta(hours=24)  # 24-hour expiration
                 )
                 
@@ -561,6 +568,46 @@ class ChatbotOrchestrator:
         }
         
         return type_mapping.get(ext, 'application/octet-stream')
+    
+    def _extract_preview_html(self, file_path: Path, agent_result=None) -> str:
+        """Extract preview HTML for Word documents from tool results or generate it"""
+        try:
+            # First, try to extract from agent result if it contains preview_html
+            if agent_result and isinstance(agent_result, str):
+                import ast
+                import re
+                
+                # Look for dictionary representations in the result string
+                dict_pattern = r'\{[^{}]*preview_html[^{}]*\}'
+                matches = re.findall(dict_pattern, agent_result, re.DOTALL)
+                
+                for match in matches:
+                    try:
+                        # Try to safely evaluate the dictionary string
+                        result_dict = ast.literal_eval(match)
+                        if isinstance(result_dict, dict) and result_dict.get('preview_html'):
+                            return result_dict['preview_html']
+                    except (ValueError, SyntaxError):
+                        continue
+            
+            # Fallback: Generate preview using WordPreviewGenerator
+            try:
+                from apps.agents.tools.word_preview import WordPreviewGenerator
+                preview_result = WordPreviewGenerator.generate_preview(str(file_path))
+                if preview_result['success']:
+                    logger.info(f"Generated preview HTML for {file_path.name}")
+                    return preview_result['preview_html']
+                else:
+                    logger.warning(f"Failed to generate preview for {file_path.name}: {preview_result.get('error', 'Unknown error')}")
+            except ImportError:
+                logger.warning("WordPreviewGenerator not available")
+            except Exception as e:
+                logger.error(f"Error generating preview for {file_path.name}: {str(e)}")
+                
+        except Exception as e:
+            logger.error(f"Error extracting preview HTML for {file_path.name}: {str(e)}")
+        
+        return None
 
     def get_available_tools(self) -> List[str]:
         """Get list of available tool names"""

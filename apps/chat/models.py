@@ -58,6 +58,7 @@ class Artifact(models.Model):
     file_name = models.CharField(max_length=255)
     file_type = models.CharField(max_length=50)  # MIME type
     file_size = models.BigIntegerField()
+    preview_html = models.TextField(blank=True, null=True)  # HTML preview for Word docs
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     

@@ -9,6 +9,13 @@ import io
 
 logger = logging.getLogger(__name__)
 
+# Import preview generator
+try:
+    from .word_preview import WordPreviewGenerator
+except ImportError:
+    logger.warning("WordPreviewGenerator not available - previews will not be generated")
+    WordPreviewGenerator = None
+
 class WordModifier:
     """Modify Word documents and insert images/charts"""
     
@@ -94,7 +101,28 @@ class WordModifier:
                     output_path = outputs_dir / "new_document.docx"
             
             doc.save(output_path)
-            return str(output_path)
+            
+            # Generate HTML preview if possible
+            preview_html = None
+            if WordPreviewGenerator:
+                try:
+                    preview_result = WordPreviewGenerator.generate_preview(str(output_path))
+                    if preview_result['success']:
+                        preview_html = preview_result['preview_html']
+                        logger.info(f"Generated HTML preview for modified document: {output_path}")
+                    else:
+                        logger.warning(f"Failed to generate preview for {output_path}: {preview_result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    logger.error(f"Error generating preview for {output_path}: {str(e)}")
+            
+            # Return structured result including preview
+            result = {
+                'file_path': str(output_path),
+                'preview_html': preview_html,
+                'message': f"Word document modified successfully: {output_path}"
+            }
+            
+            return str(result)  # Convert to string for tool compatibility
             
         except Exception as e:
             logger.error(f"Error modifying Word document: {str(e)}")

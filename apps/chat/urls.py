@@ -26,5 +26,6 @@ urlpatterns = [
     # Artifact downloads and inline display
     path('download/<uuid:artifact_id>/', ChatView.download_artifact, name='download_artifact'),
     path('view/<uuid:artifact_id>/', ChatView.view_artifact_inline, name='view_artifact_inline'),
+    path('preview/word/<uuid:artifact_id>/', ChatView.view_word_preview, name='view_word_preview'),
     path('download/session/<str:session_id>/artifacts/', download_session_artifacts, name='download_session_artifacts'),
 ]
