@@ -32,6 +32,9 @@ class ChatView:
     @staticmethod
     def index(request):
         """Main chat page"""
+        # Check if user is authenticated or if this should show auth modal
+        show_auth_modal = not request.user.is_authenticated
+        
         # Get or create document session
         session_key = request.session.session_key
         if not session_key:
@@ -69,6 +72,7 @@ class ChatView:
             'active_conversation': conversation,
             'max_documents': settings.MAX_DOCUMENTS_PER_SESSION,
             'current_document_count': documents.count(),
+            'show_auth_modal': show_auth_modal,
         }
         
         return render(request, 'chat/index.html', context)

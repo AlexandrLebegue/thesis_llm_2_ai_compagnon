@@ -1187,4 +1187,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 2000); // Poll every 2 seconds
 });
 </script>
+
+<!-- Authentication Modal -->
+{% if not user.is_authenticated %}
+    {% include 'authentication/auth_modal.html' %}
+{% endif %}
+
 {% endblock %}
